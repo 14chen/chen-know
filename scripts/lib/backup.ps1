@@ -8,6 +8,8 @@
 #   并且在服务运行中（热备份）时给出提示。
 # ============================================================================
 
+param([switch]$DryRun)
+
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'kb-common.ps1')
 
@@ -74,6 +76,10 @@ if ($header -ne 'SQLite format 3') {
 # ---------------------------------------------------------------- 轮转
 # 每天自动备份如果不清理，一年就是 365 份目录。这里只按「保留天数」清理自动备份目录，
 # 名字不符的一律不动（手工备份、取证备份都是 user-data-* 之类的名字）。
+#
+# 日期必须从目录名解析，不能看目录 mtime：robocopy 复制会整批刷新 mtime，
+# 实测 16 份备份的 mtime 全是同一天 —— 按 mtime 判过期，会把「今天这份」
+# 和一年前的备份一起判成过期，一次性删光。
 $keepDays = 30
 if ($env:KB_BACKUP_KEEP_DAYS) {
     $parsedDays = 0
@@ -85,13 +91,25 @@ $removed = @()
 $cutoff = (Get-Date).AddDays(-$keepDays)
 foreach ($dir in (Get-ChildItem -LiteralPath $backupRoot -Directory -Filter 'kb-*' -ErrorAction SilentlyContinue)) {
     if ($dir.FullName -eq $dest) { continue }
-    if ($dir.LastWriteTime -lt $cutoff) {
-        try {
-            Remove-Item -LiteralPath $dir.FullName -Recurse -Force -ErrorAction Stop
-            $removed += $dir.Name
-        } catch {
-            Write-KbWarn "旧备份清理失败（可手动删）：$($dir.Name)"
-        }
+    $st = [regex]::Match($dir.Name, '(\d{8})-(\d{6})')
+    if ($st.Success) {
+        $made = [datetime]::ParseExact($st.Groups[1].Value + $st.Groups[2].Value, 'yyyyMMddHHmmss', $null)
+    } else {
+        # 名字里没有日期（手工改名）才退回 mtime，并明确提示这条判断不可靠
+        $made = $dir.LastWriteTime
+        Write-KbWarn "无法从名字解析日期，按 mtime 判断：$($dir.Name)"
+    }
+    if ($made -ge $cutoff) { continue }
+    if ($DryRun) {
+        Write-KbNote "（dry-run）本应删除 $($dir.Name)（备份日期 $($made.ToString('yyyy-MM-dd HH:mm'))）"
+        $removed += $dir.Name
+        continue
+    }
+    try {
+        Remove-Item -LiteralPath $dir.FullName -Recurse -Force -ErrorAction Stop
+        $removed += $dir.Name
+    } catch {
+        Write-KbWarn "旧备份清理失败（可手动删）：$($dir.Name)"
     }
 }
 
@@ -102,7 +120,8 @@ if (-not $totalBytes) { $totalBytes = 0 }
 Write-Host ''
 Write-KbOk "备份完成，用时 $([math]::Round($watch.Elapsed.TotalSeconds, 2)) 秒"
 if ($removed.Count -gt 0) {
-    Write-KbNote "已清理 $($removed.Count) 份超过 $keepDays 天的旧备份：$($removed -join ', ')"
+    $verb = if ($DryRun) { '本应清理（dry-run，未删任何文件）' } else { '已清理' }
+    Write-KbNote "$verb $($removed.Count) 份超过 $keepDays 天的旧备份：$($removed -join ', ')"
 } else {
     Write-KbNote "旧备份轮转：保留最近 $keepDays 天，本次无需清理"
 }
