@@ -6,17 +6,24 @@ const ASSETS_PREFIX = 'kb-assets-'
 const OFFLINE_URL = '/offline.html'
 const STATIC_PRECACHE = [OFFLINE_URL, '/manifest.webmanifest']
 
+const META_CACHE = 'kb-meta'
+
 /** 当前构建的 cache 名：以 index.html 里带哈希的构建产物名当作版本号 */
-async function listCachesByPrefix(prefix) {
-  const keys = await caches.keys()
-  return keys.filter((k) => k.startsWith(prefix))
+async function rememberStamp(stamp) {
+  const cache = await caches.open(META_CACHE)
+  await cache.put('/kb-stamp', new Response(stamp, { headers: { 'content-type': 'text/plain' } }))
 }
 
-/** 取版本号最大的一组（stamp 是十六进制串，按字典序比较即可） */
+/* 当前版本必须来自 install 时记下的 stamp，不能对 cache 名排序取最大：
+   stamp 是内容哈希（A-Za-z0-9_-），不是单调递增的十六进制串。
+   排序取「最大」有概率选到上一代，activate 就会把刚写好的新 cache 当旧的删掉，
+   结果是部署后离线打开还是旧版本（或直接白屏）。 */
 async function activePair() {
-  const shells = await listCachesByPrefix(SHELL_PREFIX)
-  if (shells.length === 0) return null
-  const stamp = shells.map((n) => n.slice(SHELL_PREFIX.length)).sort().pop()
+  const cache = await caches.open(META_CACHE)
+  const res = await cache.match('/kb-stamp')
+  if (!res) return null
+  const stamp = (await res.text()).trim()
+  if (!stamp) return null
   return { stamp, shell: SHELL_PREFIX + stamp, assets: ASSETS_PREFIX + stamp }
 }
 
@@ -45,6 +52,7 @@ self.addEventListener('install', (event) => {
       const res = await fetch('/', { cache: 'no-store' })
       const html = await res.text()
       const stamp = stampFromHtml(html)
+      await rememberStamp(stamp)
       const shellCache = await caches.open(SHELL_PREFIX + stamp)
       const assetsCache = await caches.open(ASSETS_PREFIX + stamp)
 
@@ -65,10 +73,14 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
+      // 只在「确实知道当前版本」时才清理：install 失败（离线/接口异常）时 pair 为 null，
+      // 此时什么都不删，保住上一代离线外壳总比清空强。
       const pair = await activePair()
-      const keep = new Set(pair ? [pair.shell, pair.assets] : [])
-      const names = await caches.keys()
-      await Promise.all(names.filter((n) => !keep.has(n)).map((n) => caches.delete(n)))
+      if (pair) {
+        const keep = new Set([pair.shell, pair.assets, META_CACHE])
+        const names = await caches.keys()
+        await Promise.all(names.filter((n) => !keep.has(n)).map((n) => caches.delete(n)))
+      }
       await self.clients.claim()
     })(),
   )

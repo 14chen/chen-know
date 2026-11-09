@@ -964,9 +964,10 @@
   padding: var(--sp-6) var(--sp-5) var(--sp-7);
 }
 
-/* 宽屏：占满可用宽度（顶栏「宽屏/窄栏」切换） */
+/* 宽屏：占满可用宽度（顶栏「宽屏/窄栏」切换）。
+   仍然夹一个上限，否则 1920 屏上单行能到 120 个汉字，回读必须转头。 */
 .kb-editor-region--wide .kb-editor-pane {
-  max-width: none;
+  max-width: min(100%, 100ch);
 }
 
 .kb-editor-pane > .kb-editor {
@@ -1020,7 +1021,7 @@
   :root {
     --sidebar-w: 240px;
     /* 与 tokens.css 的 --editor-max 保持一致（两处都要改） */
-    --editor-max: 860px;
+    --editor-max: 680px;
   }
 
   .kb-search {

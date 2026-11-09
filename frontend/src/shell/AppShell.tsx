@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { describeApiError, request } from '@/api/client'
 import { logout } from '@/api/auth'
 import { createNote, deleteNote, patchNote } from '@/api/notes'
 import type { SelectedNoteMeta } from '@/shell/useNotes'
 import type { FolderNode, User } from '@/api/types'
-import { MarkdownEditor } from '@/editor/MarkdownEditor'
 import { Button } from '@/components/Button'
 import { EmptyState } from '@/components/EmptyState'
 import { IconAlert, IconFileText, IconMoon, IconPanelLeft, IconSun, IconUsers } from '@/components/Icon'
@@ -28,6 +27,12 @@ import type { Theme } from './theme'
 import '@/styles/note-meta.css'
 import '@/styles/note-outline.css'
 import '@/styles/editor-typography.css'
+
+/* 编辑器（CodeMirror）是首屏最大的一块，而未登录时根本用不到：
+   拆成独立 chunk 按需加载，登录页只付 React + 应用外壳的体积。 */
+const MarkdownEditor = lazy(() =>
+  import('@/editor/MarkdownEditor').then((m) => ({ default: m.MarkdownEditor })),
+)
 
 /** 从目录树里找出某个目录的完整路径（根 → 叶子） */
 function folderPath(tree: FolderNode[], folderId: number | null): FolderNode[] {
@@ -1203,16 +1208,18 @@ export function AppShell({ user, theme, onToggleTheme, onLoggedOut }: AppShellPr
         />
         <DigestPanel noteId={selectedId} digest={notes.selectedDigest} />
         <CodeBlockTools noteId={selectedId} content={notes.content} />
-        <MarkdownEditor
-          key={selectedId}
-          value={notes.content}
-          onChange={changeContent}
-          noteTitle={notes.selectedTitle}
-          knownTitles={knownTitles}
-          onWikiLinkClick={handleWikiLinkClick}
-          onUploadImage={uploadImage}
-          onSave={saveNow}
-        />
+        <Suspense fallback={<div className="kb-editor-placeholder" aria-busy="true" />}>
+          <MarkdownEditor
+            key={selectedId}
+            value={notes.content}
+            onChange={changeContent}
+            noteTitle={notes.selectedTitle}
+            knownTitles={knownTitles}
+            onWikiLinkClick={handleWikiLinkClick}
+            onUploadImage={uploadImage}
+            onSave={saveNow}
+          />
+        </Suspense>
         <NotePrevNext
           items={visibleNotes}
           currentId={selectedId}

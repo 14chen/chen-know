@@ -24,7 +24,7 @@
   /* 字号 ---------------------------------------------------------------- */
   --fs-xs: 12px;
   --fs-sm: 13px;
-  --fs-base: 14px;
+  --fs-base: 15px;
   --fs-md: 15px;
   --fs-lg: 18px;
   --fs-xl: 22px;
@@ -48,9 +48,10 @@
 
   /* 布局 ---------------------------------------------------------------- */
   --sidebar-w: 288px;
-  /* 编辑器（正文）可用宽度；宽屏模式下由顶栏切换为占满。
-     改动时请同步 frontend/src/styles/shell.css 里 ≤1279px 的同名覆盖值。 */
-  --editor-max: 860px;
+  /* 编辑器（正文）可用宽度；宽屏模式下由顶栏切换为占满（但会夹一个 100ch 上限）。
+     改动时请同步 frontend/src/styles/shell.css 里 ≤1279px 的同名覆盖值。
+     680px 是中文舒适行宽：15px 字号下约 45 个汉字一行。 */
+  --editor-max: 680px;
 
   /* 字体（契约之外的补充 token，供全站复用）----------------------------- */
   --font-sans: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei',
