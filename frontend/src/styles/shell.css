@@ -325,7 +325,8 @@
   justify-content: space-between;
   gap: var(--sp-2);
   flex: none;
-  padding: var(--sp-3) var(--sp-2) var(--sp-1) var(--sp-4);
+  /* 与 .kb-tree__head 同高：两个小标题才对得上同一条基线 */
+  padding: var(--sp-2) var(--sp-2) var(--sp-1) var(--sp-4);
   font-size: var(--fs-xs);
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -453,11 +454,15 @@
   color: var(--text-muted);
 }
 
+/* 目录行：右侧留一个固定槽位给「计数 / ⋯」，
+   两种元素都绝对定位到同一个右边界，所有行的数字才对得齐 */
 .kb-tree-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 2px;
-  min-height: 30px;
+  min-height: 28px;
+  padding-right: 34px;
   border-radius: var(--r-md);
   transition: background-color var(--dur-fast) var(--ease);
 }
@@ -530,25 +535,26 @@
 }
 
 .kb-tree-row__count {
-  flex: none;
+  position: absolute;
+  top: 50%;
+  right: var(--sp-2);
+  translate: 0 -50%;
+  min-width: 16px;
   font-size: var(--fs-xs);
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
+  text-align: right;
+  transition: opacity var(--dur-fast) var(--ease);
 }
 
-.kb-tree-row__actions {
-  flex: none;
-  display: flex;
-  align-items: center;
-  opacity: 0;
-}
-
-.kb-tree-row:hover .kb-tree-row__actions,
-.kb-tree-row:focus-within .kb-tree-row__actions {
-  opacity: 1;
-}
-
-.kb-tree-row__action {
+/* 三个图标常驻会把目录名挤短、把计数推到 x=199（虚拟行在 x=266）；
+   收成一个「⋯」后，目录名多出 72px，计数也回到同一条右边线 */
+.kb-tree-row__more {
+  position: absolute;
+  top: 50%;
+  right: 2px;
+  translate: 0 -50%;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -556,16 +562,27 @@
   height: 24px;
   border-radius: var(--r-sm);
   color: var(--text-muted);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
 }
 
-.kb-tree-row__action:hover {
+.kb-tree-row:hover .kb-tree-row__more,
+.kb-tree-row:focus-within .kb-tree-row__more {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* 「⋯」和计数共用一格：一个出现，另一个让位 */
+.kb-tree-row:hover .kb-tree-row__count,
+.kb-tree-row:focus-within .kb-tree-row__count {
+  opacity: 0;
+}
+
+.kb-tree-row__more:hover {
   background: var(--bg-muted);
   color: var(--text);
-}
-
-.kb-tree-row__action--danger:hover {
-  background: var(--danger-soft);
-  color: var(--danger);
 }
 
 /* ---- 笔记列表 ---------------------------------------------------------- */
@@ -630,7 +647,7 @@
   flex-direction: column;
   gap: 2px;
   width: 100%;
-  padding: var(--sp-2) var(--sp-6) var(--sp-2) var(--sp-3);
+  padding: 6px 30px 6px 10px;
   border-radius: inherit;
   text-align: left;
 }
@@ -724,8 +741,9 @@
   display: flex;
   align-items: center;
   gap: var(--sp-1);
-  font-size: var(--fs-base);
-  font-weight: 500;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  line-height: 1.45;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -751,7 +769,8 @@
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  font-size: var(--fs-xs);
+  font-size: 11px;
+  line-height: 1.4;
   color: var(--text-muted);
   overflow: hidden;
   white-space: nowrap;
@@ -1149,13 +1168,21 @@
     height: 44px;
   }
 
-  .kb-tree-row__actions {
-    opacity: 1;
+  .kb-tree-row {
+    padding-right: 52px;
   }
 
-  .kb-tree-row__action {
+  /* 触摸设备没有 hover：计数让位给常驻的「⋯」 */
+  .kb-tree-row__more {
+    opacity: 1;
+    pointer-events: auto;
+    right: 0;
     width: 44px;
     height: 44px;
+  }
+
+  .kb-tree-row__count {
+    opacity: 0;
   }
 
   /* 触摸设备不能依赖 hover：列表项操作常驻可见，且 ≥44×44 */

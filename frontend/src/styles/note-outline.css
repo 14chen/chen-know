@@ -9,32 +9,55 @@
 }
 
 /* ---- M1 大纲 ---- */
+/* 常驻面板做成一张真正的卡片：原来只有一根左边框、没有底色和圆角，
+   看起来像正文挤出来的一条残留；面板宽度由 AppShell 按正文右侧留白算 */
 .kb-outline {
   position: fixed;
-  top: calc(var(--topbar-h, 56px) + var(--sp-4));
-  right: 8px;
+  top: calc(var(--topbar-h, 56px) + var(--sp-3));
+  right: var(--sp-3);
+  display: flex;
+  flex-direction: column;
   width: 200px;
-  max-height: calc(100vh - var(--topbar-h, 56px) - var(--sp-7));
-  overflow-y: auto;
-  padding: var(--sp-2) 0;
-  border-left: 1px solid var(--border);
-  font-size: 12px;
-  line-height: 1.5;
+  max-height: calc(100vh - var(--topbar-h, 56px) - var(--sp-6));
+  padding: var(--sp-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  font-size: 12.5px;
+  line-height: 1.45;
   z-index: 20;
 }
 
 .kb-outline__head {
+  flex: none;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-2);
-  padding: 0 var(--sp-2) var(--sp-2);
-  font-weight: 650;
-  color: var(--text-secondary);
+  gap: var(--sp-1);
+  padding: var(--sp-1) var(--sp-1) var(--sp-2) var(--sp-2);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.kb-outline__count {
+  flex: none;
+  min-width: 16px;
+  padding: 0 5px;
+  border-radius: var(--r-full);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 16px;
+  letter-spacing: 0;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .kb-outline__collapse,
 .kb-outline__close {
+  margin-left: auto;
   border: 0;
   background: none;
   padding: 2px 4px;
@@ -54,46 +77,53 @@
 .kb-outline__list {
   list-style: none;
   margin: 0;
-  padding: 0 0 0 var(--sp-2);
+  min-height: 0;
+  padding: 0 var(--sp-1) var(--sp-1);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
+/* 最多两行：面板只有 140–216px，长标题宁可折行也不要「跳过的源（已…」 */
 .kb-outline__item {
-  display: block;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   width: 100%;
-  padding: 3px 6px;
+  padding: 4px 8px;
   border: 0;
-  border-left: 2px solid transparent;
-  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  border-radius: var(--r-sm);
   background: none;
   font: inherit;
-  font-size: 12px;
+  font-size: 12.5px;
+  line-height: 1.45;
   color: var(--text-secondary);
   text-align: left;
   cursor: pointer;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  box-shadow: inset 2px 0 0 transparent;
 }
 
 .kb-outline__item:hover {
   color: var(--text);
-  background: var(--bg-muted);
+  background: var(--bg-subtle);
 }
 
 .kb-outline__item.is-active {
   color: var(--accent);
-  border-left-color: var(--accent);
   background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
   font-weight: 600;
 }
 
 .kb-outline__item--l2 {
-  padding-left: 14px;
+  padding-left: 12px;
 }
 
 .kb-outline__item--l3 {
-  padding-left: 24px;
-  font-size: 11.5px;
+  padding-left: 20px;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .kb-outline__more {
@@ -290,11 +320,18 @@
   }
 }
 /* 平板：右侧抽屉 */
+/* 抽屉/手机模式只是一个容器，不能继承卡片外观（边框、底色、阴影都要撤掉） */
+.kb-outline--mobile,
 .kb-outline--drawer {
   position: static;
+  display: block;
   width: auto;
   max-height: none;
-  border-left: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
   overflow: visible;
 }
 

@@ -1,8 +1,9 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
+import type { ReactNode, RefObject } from 'react'
 import { describeApiError, request } from '@/api/client'
 import { logout } from '@/api/auth'
 import { createNote, deleteNote, patchNote } from '@/api/notes'
+import type { MarkdownEditorHandle } from '@/editor/MarkdownEditor'
 import type { SelectedNoteMeta } from '@/shell/useNotes'
 import type { FolderNode, User } from '@/api/types'
 import { Button } from '@/components/Button'
@@ -370,7 +371,17 @@ export function parseOutline(content: string): OutlineItem[] {
 const OUTLINE_OPEN_KEY = 'kb.outline.open'
 const OUTLINE_MAX = 30
 
-function NoteOutline({ content, noteId }: { content: string; noteId: number }) {
+function NoteOutline({
+  content,
+  noteId,
+  noteTitle,
+  editorRef,
+}: {
+  content: string
+  noteId: number
+  noteTitle: string
+  editorRef: RefObject<MarkdownEditorHandle | null>
+}) {
   const [open, setOpen] = useState<boolean>(() => {
     try {
       return window.localStorage.getItem(OUTLINE_OPEN_KEY) !== '0'
@@ -381,7 +392,13 @@ function NoteOutline({ content, noteId }: { content: string; noteId: number }) {
   const [activeIdx, setActiveIdx] = useState(-1)
   const [mobileOpen, setMobileOpen] = useState(false)
   const breakpoint = useBreakpoint()
-  const items = useMemo(() => parseOutline(content), [content])
+  // 大纲里不重复笔记标题：顶栏、面包屑、元信息行已经各显示过一次，150px 的面板里还会被折成两行
+  const items = useMemo(() => {
+    const parsed = parseOutline(content)
+    const title = noteTitle.replace(/\s+/g, ' ').trim()
+    if (!title) return parsed
+    return parsed.filter((item) => !(item.level === 1 && item.text.replace(/\s+/g, ' ').trim() === title))
+  }, [content, noteTitle])
   const shown = useMemo(() => items.slice(0, OUTLINE_MAX), [items])
   // 实际断点：desktop ≥1280 / laptop 1024–1279 / tablet 768–1023 / phone ≤767
   //   → 桌面常驻面板；笔记本（1024–1279，含方案里的 900–1179 平板）默认收起 + 右侧抽屉；
@@ -391,21 +408,40 @@ function NoteOutline({ content, noteId }: { content: string; noteId: number }) {
   // 正文右侧还剩多少留白：够就内嵌一个「刚好放得下」的面板，不够就降级成抽屉（绝不压正文）
   const [gutter, setGutter] = useState(0)
   useEffect(() => {
+    const pane = document.querySelector('.kb-editor-pane')
+    if (!(pane instanceof HTMLElement)) return
     const measure = () => {
-      const content = document.querySelector('.kb-editor-pane .cm-content')
+      const content = pane.querySelector('.cm-content')
       const right = content instanceof HTMLElement ? content.getBoundingClientRect().right : 0
       setGutter(right > 0 ? Math.max(0, window.innerWidth - right) : 0)
     }
+    // 编辑器是懒加载的：等 .cm-content 出现后再观察它的宽度。
+    // 宽窄切换、侧栏开合都会改它的宽度，ResizeObserver 一次不漏（不必再每 700ms 轮询）。
+    let observer: ResizeObserver | null = null
+    let bridge: MutationObserver | null = null
+    const attach = () => {
+      if (observer) return
+      const content = pane.querySelector('.cm-content')
+      if (!(content instanceof HTMLElement)) return
+      observer = new ResizeObserver(measure)
+      observer.observe(content)
+      bridge?.disconnect()
+      bridge = null
+      measure()
+    }
+    bridge = new MutationObserver(attach)
+    bridge.observe(pane, { childList: true, subtree: true })
+    attach()
     measure()
     window.addEventListener('resize', measure)
-    const timer = window.setInterval(measure, 700)
     return () => {
+      bridge?.disconnect()
+      observer?.disconnect()
       window.removeEventListener('resize', measure)
-      window.clearInterval(timer)
     }
-  }, [content, open])
-  const panelWidth = Math.max(112, Math.min(200, Math.round(gutter - 32)))
-  const canInline = !tablet && gutter >= 130
+  }, [noteId, open])
+  const panelWidth = Math.max(140, Math.min(216, Math.round(gutter - 12)))
+  const canInline = !tablet && gutter >= 150
 
   const toggleOpen = useCallback(() => {
     setOpen((current) => {
@@ -421,50 +457,73 @@ function NoteOutline({ content, noteId }: { content: string; noteId: number }) {
 
   const jumpTo = useCallback(
     (item: OutlineItem) => {
+      setActiveIdx(shown.findIndex((candidate) => candidate.line === item.line))
+      setMobileOpen(false)
+      // 交给编辑器按「行号」定位：同名标题不会跳错，也不再有两次滚动（先按比例、再按文字）
+      const handle = editorRef.current
+      if (handle) {
+        handle.scrollToLine(item.line)
+        return
+      }
+      // 编辑器还没挂载完时退回按比例定位
       const scroller = document.querySelector('.kb-editor-pane .cm-scroller')
       const totalLines = content.split(/\r?\n/).length || 1
       if (scroller instanceof HTMLElement) {
         const ratio = item.line / totalLines
-        scroller.scrollTo({ top: Math.max(0, ratio * scroller.scrollHeight - 80), behavior: 'smooth' })
+        scroller.scrollTo({ top: Math.max(0, ratio * scroller.scrollHeight - 80) })
       }
-      setActiveIdx(shown.findIndex((candidate) => candidate.line === item.line))
-      setMobileOpen(false)
-      window.setTimeout(() => {
-        const headingLines = document.querySelectorAll(
-          '.kb-editor-pane .cm-line.cm-kb-h1, .kb-editor-pane .cm-line.cm-kb-h2, .kb-editor-pane .cm-line.cm-kb-h3',
-        )
-        for (const line of Array.from(headingLines)) {
-          if ((line.textContent ?? '').replace(/^#+\s*/, '').trim() === item.text) {
-            line.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            break
-          }
-        }
-      }, 320)
     },
-    [content, shown],
+    [content, editorRef, shown],
   )
 
-  // 高亮：IntersectionObserver 观察渲染出来的标题行（不是每帧算）
+  // 高亮：跟着滚动取「最后一个已经越过视口顶部 32px 的标题」。
+  // 原来用 IntersectionObserver，目标只在挂载那一刻抓一次；CodeMirror 只渲染视口附近的行，
+  // 滚出初始视口后新挂上来的标题没人观察，高亮就停在原处不动了。
   useEffect(() => {
     if (!open || items.length === 0) return
-    const root = document.querySelector('.kb-editor-pane .cm-scroller')
-    const targets = document.querySelectorAll(
-      '.kb-editor-pane .cm-line.cm-kb-h1, .kb-editor-pane .cm-line.cm-kb-h2, .kb-editor-pane .cm-line.cm-kb-h3',
-    )
-    if (!root || targets.length === 0) return
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries.find((entry) => entry.isIntersecting)
-        if (!visible) return
-        const text = (visible.target.textContent ?? '').replace(/^#+\s*/, '').trim()
+    let scroller: HTMLElement | null = null
+    let raf = 0
+    let timer = 0
+    const measure = () => {
+      raf = 0
+      if (!scroller) return
+      const top = scroller.getBoundingClientRect().top
+      let active = -1
+      const headings = scroller.querySelectorAll(
+        '.cm-line.cm-kb-h1, .cm-line.cm-kb-h2, .cm-line.cm-kb-h3',
+      )
+      for (const line of Array.from(headings)) {
+        if (line.getBoundingClientRect().top - top > 32) break
+        const text = (line.textContent ?? '').replace(/^#+\s*/, '').trim()
         const idx = shown.findIndex((item) => item.text === text)
-        if (idx >= 0) setActiveIdx(idx)
-      },
-      { root, rootMargin: '0px 0px -70% 0px', threshold: 0 },
-    )
-    targets.forEach((target) => observer.observe(target))
-    return () => observer.disconnect()
-  }, [open, items, shown, noteId, content])
+        if (idx >= 0) active = idx
+      }
+      // 滚到底时最后几个标题永远越不过 32px 阈值，直接锁到最后一条（否则末尾小节永远不会高亮）
+      const atBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2
+      if (atBottom) active = shown.length - 1
+      if (active >= 0) setActiveIdx(active)
+    }
+    const onScroll = () => {
+      if (!raf) raf = window.requestAnimationFrame(measure)
+    }
+    // 编辑器是懒加载的，正文容器可能还没挂上来：每 300ms 找一次，找到就停
+    const attach = () => {
+      const el = document.querySelector('.kb-editor-pane .cm-scroller')
+      if (!(el instanceof HTMLElement)) {
+        timer = window.setTimeout(attach, 300)
+        return
+      }
+      scroller = el
+      el.addEventListener('scroll', onScroll, { passive: true })
+      measure()
+    }
+    attach()
+    return () => {
+      window.clearTimeout(timer)
+      scroller?.removeEventListener('scroll', onScroll)
+      if (raf) window.cancelAnimationFrame(raf)
+    }
+  }, [open, items, shown, noteId])
 
   if (items.length <= 1) return null
 
@@ -552,7 +611,7 @@ function NoteOutline({ content, noteId }: { content: string; noteId: number }) {
 
   if (!open) {
     return (
-      <button type="button" className="kb-outline kb-outline__collapsed" onClick={toggleOpen} title="展开文章大纲">
+      <button type="button" className="kb-outline__collapsed" onClick={toggleOpen} title="展开文章大纲">
         目录
       </button>
     )
@@ -561,7 +620,8 @@ function NoteOutline({ content, noteId }: { content: string; noteId: number }) {
   return (
     <aside className="kb-outline" aria-label="文章大纲" style={{ width: panelWidth + 'px' }}>
       <div className="kb-outline__head">
-        <span>大纲</span>
+        <span className="kb-outline__title">大纲</span>
+        <span className="kb-outline__count">{items.length}</span>
         <button type="button" className="kb-outline__collapse" onClick={toggleOpen} aria-label="收起大纲">
           收起
         </button>
@@ -710,13 +770,18 @@ function NotePrevNext({
           <span className="kb-pn__dir">← 上一篇</span>
           <span className="kb-pn__title">{prev.title || '未命名笔记'}</span>
         </button>
-      ) : null}
+      ) : (
+        // 没有上一/下一篇时用占位格，避免唯一那张卡被拉成整行（看着像布局坏了）
+        <span className="kb-pn__ghost">已经是第一篇</span>
+      )}
       {next ? (
         <button type="button" className="kb-pn__card is-next" onClick={() => onOpen(next.id)}>
           <span className="kb-pn__dir">下一篇 →</span>
           <span className="kb-pn__title">{next.title || '未命名笔记'}</span>
         </button>
-      ) : null}
+      ) : (
+        <span className="kb-pn__ghost">已经是最后一篇</span>
+      )}
     </nav>
   )
 }
@@ -795,6 +860,7 @@ export function AppShell({ user, theme, onToggleTheme, onLoggedOut }: AppShellPr
   }, [known, requested, toast])
 
   const deniedWarnedRef = useRef(false)
+  const editorRef = useRef<MarkdownEditorHandle | null>(null)
   useEffect(() => {
     if (!denied) {
       deniedWarnedRef.current = false
@@ -1211,6 +1277,7 @@ export function AppShell({ user, theme, onToggleTheme, onLoggedOut }: AppShellPr
         <Suspense fallback={<div className="kb-editor-placeholder" aria-busy="true" />}>
           <MarkdownEditor
             key={selectedId}
+            ref={editorRef}
             value={notes.content}
             onChange={changeContent}
             noteTitle={notes.selectedTitle}
@@ -1226,7 +1293,12 @@ export function AppShell({ user, theme, onToggleTheme, onLoggedOut }: AppShellPr
           onOpen={(id) => navigateWithFlush('notes', { id })}
         />
         <RelatedNotes noteId={selectedId} onOpen={(id) => navigateWithFlush('notes', { id })} />
-        <NoteOutline content={notes.content} noteId={selectedId} />
+        <NoteOutline
+        content={notes.content}
+        noteId={selectedId}
+        noteTitle={notes.selectedTitle}
+        editorRef={editorRef}
+      />
       </div>
     )
   } else {

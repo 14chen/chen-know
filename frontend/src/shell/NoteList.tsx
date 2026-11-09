@@ -15,10 +15,17 @@ function useDelayedFlag(active: boolean, delay = 500): boolean {
   return shown
 }
 
+const HEADING_LINE = /^\s{0,3}#{1,6}\s+([^\n]*)(?:\n|$)/
+
 /** 列表摘要：剥掉 Markdown 标记，只留纯文本，最多 60 字（后端已按需截断 excerpt） */
-export function plainExcerpt(raw: string | null | undefined): string {
+export function plainExcerpt(raw: string | null | undefined, title?: string | null): string {
   if (!raw) return ''
-  const text = raw
+  // 正文第一行常常就是笔记标题（H1），列表里已经单独显示过，别再重复一遍
+  const heading = HEADING_LINE.exec(raw)
+  const headingText = (heading?.[1] ?? '').replace(/\s+/g, ' ').trim()
+  const titleText = (title ?? '').replace(/\s+/g, ' ').trim()
+  const body = heading && titleText && headingText === titleText ? raw.slice(heading[0].length) : raw
+  const text = body
     .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ') // 图片
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1') // 链接 → 文字
     .replace(/^\s{0,3}#{1,6}\s+/gm, '') // 标题标记
@@ -242,8 +249,10 @@ export function NoteList({
                     {item.isPinned ? <span className="kb-note-item__pin">置顶</span> : null}
                     {item.title || '无标题'}
                   </span>
-                  {plainExcerpt(item.excerpt) ? (
-                    <span className="kb-note-item__excerpt">{plainExcerpt(item.excerpt)}</span>
+                  {plainExcerpt(item.excerpt, item.title) ? (
+                    <span className="kb-note-item__excerpt">
+                      {plainExcerpt(item.excerpt, item.title)}
+                    </span>
                   ) : null}
                   <span className="kb-note-item__meta">
                     <span>{formatRelativeTime(item.updatedAt)}</span>

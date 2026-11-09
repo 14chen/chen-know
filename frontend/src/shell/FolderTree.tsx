@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import type { DragEvent, ReactNode } from 'react'
 import type { FolderNode } from '@/api/types'
 import { Button } from '@/components/Button'
@@ -9,17 +9,21 @@ import {
   IconFolder,
   IconInbox,
   IconLayers,
-  IconPencil,
   IconPlus,
   IconRefresh,
-  IconTrash,
 } from '@/components/Icon'
 import { Modal } from '@/components/Modal'
 import { Skeleton } from '@/components/Skeleton'
 import { TextField } from '@/components/TextField'
 import { FOLDER_DND_TYPE, NOTE_DND_TYPE, hasType, readDragId } from './dnd'
+import { IconMore } from './shellIcons'
 
 const EXPANDED_KEY = 'kb.tree.expanded'
+
+/** 行级菜单：fixed 定位，避免被目录树的滚动容器裁掉（高度只用于判断往上翻还是往下翻） */
+const MENU_HEIGHT = 120
+
+type TreeMenu = { id: number; node: FolderNode; top: number; right: number }
 
 type DropTarget = { kind: 'root' } | { kind: 'unclassified' } | { kind: 'folder'; node: FolderNode }
 
@@ -85,6 +89,35 @@ export function FolderTree({
   const [dialog, setDialog] = useState<TreeDialog>(null)
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
+  const [menu, setMenu] = useState<TreeMenu | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  /* 菜单打开时：点别处 / Esc / 滚动 / 改窗口大小都关掉（与笔记列表的「⋯」同一套规则） */
+  useEffect(() => {
+    if (!menu) return
+    const close = () => setMenu(null)
+    const onDocumentClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null
+      if (!target) return
+      if (menuRef.current?.contains(target)) return
+      // 「⋯」自己负责开合，不在这里抢
+      if (target.closest('.kb-tree-row__more')) return
+      close()
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') close()
+    }
+    document.addEventListener('click', onDocumentClick)
+    document.addEventListener('keydown', onKeyDown)
+    window.addEventListener('resize', close)
+    window.addEventListener('scroll', close, true)
+    return () => {
+      document.removeEventListener('click', onDocumentClick)
+      document.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('resize', close)
+      window.removeEventListener('scroll', close, true)
+    }
+  }, [menu])
 
   useEffect(() => {
     try {
@@ -131,6 +164,20 @@ export function FolderTree({
   const openDialog = (next: Exclude<TreeDialog, null>) => {
     setDraft(next.kind === 'rename' ? next.node.name : '')
     setDialog(next)
+  }
+
+  const openMenu = (node: FolderNode, anchor: HTMLElement) => {
+    if (menu?.id === node.id) {
+      setMenu(null)
+      return
+    }
+    // 右边缘贴着「⋯」对齐：菜单宽度由内容决定，用 right 定位就不会差几个像素
+    const rect = anchor.getBoundingClientRect()
+    const right = Math.max(8, window.innerWidth - rect.right)
+    const below = rect.bottom + 6
+    const top =
+      below + MENU_HEIGHT > window.innerHeight ? Math.max(8, rect.top - MENU_HEIGHT - 6) : below
+    setMenu({ id: node.id, node, top, right })
   }
 
   const submitDialog = async () => {
@@ -248,38 +295,25 @@ export function FolderTree({
             <span className="kb-tree-row__name" title={node.name}>
               {node.name}
             </span>
-            <span className="kb-tree-row__count">{node.noteCount}</span>
           </button>
 
-          <span className="kb-tree-row__actions">
-            <button
-              type="button"
-              className="kb-tree-row__action"
-              title={`在「${node.name}」下新建子目录`}
-              aria-label={`在 ${node.name} 下新建子目录`}
-              onClick={() => openDialog({ kind: 'create', parentId: node.id })}
-            >
-              <IconPlus size={14} />
-            </button>
-            <button
-              type="button"
-              className="kb-tree-row__action"
-              title={`重命名「${node.name}」`}
-              aria-label={`重命名 ${node.name}`}
-              onClick={() => openDialog({ kind: 'rename', node })}
-            >
-              <IconPencil size={14} />
-            </button>
-            <button
-              type="button"
-              className="kb-tree-row__action kb-tree-row__action--danger"
-              title={`删除「${node.name}」`}
-              aria-label={`删除 ${node.name}`}
-              onClick={() => onDelete(node)}
-            >
-              <IconTrash size={14} />
-            </button>
-          </span>
+          <span className="kb-tree-row__count">{node.noteCount}</span>
+          <button
+            type="button"
+            className="kb-tree-row__more"
+            aria-label={`「${node.name}」的更多操作`}
+            aria-haspopup="menu"
+            aria-expanded={menu?.id === node.id}
+            title="更多操作"
+            draggable={false}
+            onDragStart={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation()
+              openMenu(node, event.currentTarget)
+            }}
+          >
+            <IconMore size={15} />
+          </button>
         </div>
 
         {hasChildren && isOpen ? (
@@ -328,8 +362,8 @@ export function FolderTree({
               <IconLayers size={15} />
             </span>
             <span className="kb-tree-row__name">全部笔记</span>
-            <span className="kb-tree-row__count">{counts.all}</span>
           </button>
+          <span className="kb-tree-row__count">{counts.all}</span>
         </div>
 
         <div
@@ -350,8 +384,8 @@ export function FolderTree({
               <IconInbox size={15} />
             </span>
             <span className="kb-tree-row__name">未分类</span>
-            <span className="kb-tree-row__count">{counts.unclassified}</span>
           </button>
+          <span className="kb-tree-row__count">{counts.unclassified}</span>
         </div>
 
         {loading && tree.length === 0 ? (
@@ -377,6 +411,56 @@ export function FolderTree({
           tree.map((node) => renderRow(node, 0))
         )}
       </div>
+
+      {menu ? (
+        <div
+          ref={menuRef}
+          className="kb-note-menu"
+          role="menu"
+          aria-label={`「${menu.node.name}」的目录操作`}
+          style={{ top: `${menu.top}px`, right: `${menu.right}px` }}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            className="kb-note-menu__item"
+            aria-label={`在 ${menu.node.name} 下新建子目录`}
+            onClick={() => {
+              const node = menu.node
+              setMenu(null)
+              openDialog({ kind: 'create', parentId: node.id })
+            }}
+          >
+            新建子目录
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="kb-note-menu__item"
+            aria-label={`重命名 ${menu.node.name}`}
+            onClick={() => {
+              const node = menu.node
+              setMenu(null)
+              openDialog({ kind: 'rename', node })
+            }}
+          >
+            重命名
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="kb-note-menu__item kb-note-menu__item--danger"
+            aria-label={`删除 ${menu.node.name}`}
+            onClick={() => {
+              const node = menu.node
+              setMenu(null)
+              onDelete(node)
+            }}
+          >
+            删除
+          </button>
+        </div>
+      ) : null}
 
       <Modal
         open={dialog !== null}

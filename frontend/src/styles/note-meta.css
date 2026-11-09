@@ -134,14 +134,27 @@
   max-width: 100%;
 }
 
-/* 只有一侧时占满整行，不留灰框 */
-.kb-pn__card:only-child {
-  grid-column: 1 / -1;
+/* 只有一侧时留一个虚线占位格：整行拉满一张空卡看着像布局坏了 */
+.kb-pn__ghost {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px dashed var(--border);
+  border-radius: var(--r-md);
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 @media (max-width: 899px) {
   .kb-pn {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* 单列时占位格没有意义，只会多占一行 */
+  .kb-pn__ghost {
+    display: none;
   }
 
   .kb-pn__card,

@@ -73,6 +73,8 @@ export interface MarkdownEditorHandle {
   focus(): void
   /** 让编辑器重新读取 value（外部替换内容后调用，保持光标位置合理） */
   sync(): void
+  /** 滚动到指定行（0 基，与大纲里的 line 对齐）。只移动视口，不动光标 */
+  scrollToLine(line: number): void
 }
 
 interface Latest {
@@ -517,6 +519,18 @@ export const MarkdownEditor = forwardRef<MarkdownEditorHandle, MarkdownEditorPro
             lastEmitted.current = next
           }
           view.requestMeasure()
+        },
+        scrollToLine(line: number) {
+          const view = viewRef.current
+          if (!view) return
+          const total = view.state.doc.lines
+          const target = Math.min(Math.max(1, Math.round(line) + 1), total)
+          view.dispatch({
+            effects: EditorView.scrollIntoView(view.state.doc.line(target).from, {
+              y: 'start',
+              yMargin: 24,
+            }),
+          })
         },
       }),
       [],
