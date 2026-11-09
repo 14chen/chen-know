@@ -1,0 +1,167 @@
+/* ==========================================================================
+   M4 正文排版细节 + 首页摘要行
+   只改样式（外加容器外的装饰层），不碰 CodeMirror 的扩展/事件/行为
+   ========================================================================== */
+
+/* ---- 1. 代码块：横向滚动、不折行、移动端 13px ---- */
+.kb-editor-pane .cm-line.cm-kb-code,
+.kb-editor-pane .cm-kb-code {
+  white-space: pre;
+  overflow-x: auto;
+  overflow-y: hidden;
+  font-variant-ligatures: none;
+  max-width: none;
+}
+
+/* 语言标签 + 复制按钮的浮层容器（由 CodeBlockTools 渲染，绝对定位于 .kb-editor-pane） */
+.kb-codeb {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.kb-codeb__box {
+  position: absolute;
+  /* 默认彻底不参与点击：绝不挡住进入代码块编辑 */
+  opacity: 0;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transform: translateY(4px);
+  transition: opacity 150ms ease;
+}
+
+.kb-codeb__box.is-shown {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (max-width: 899px) {
+  .kb-codeb {
+    display: none;
+  }
+}
+
+.kb-codeb__lang {
+  padding: 1px 7px;
+  border-radius: var(--r-full);
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+}
+
+.kb-codeb__copy {
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.6;
+  cursor: pointer;
+}
+
+.kb-codeb__copy:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.kb-codeb__copy.is-done {
+  color: var(--success, #15803d);
+  border-color: currentcolor;
+}
+
+/* ---- 2. 表格：窄屏横向滚动 + 首列固定 + hover 行高亮（默认无斑马纹） ---- */
+.kb-editor-pane table {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-collapse: collapse;
+}
+
+.kb-editor-pane table thead tr,
+.kb-editor-pane table tbody tr {
+  background: transparent;
+}
+
+.kb-editor-pane table tbody tr:hover {
+  background: var(--bg-muted);
+}
+
+.kb-editor-pane table th,
+.kb-editor-pane table td {
+  white-space: nowrap;
+}
+
+.kb-editor-pane table th:first-child,
+.kb-editor-pane table td:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+  z-index: 1;
+}
+
+.kb-editor-pane table tbody tr:hover td:first-child {
+  background: var(--bg-muted);
+}
+
+/* ---- 3. 标题间距：一级 > 二级 > 三级（视觉分段） ---- */
+.kb-editor-pane .cm-line.cm-kb-h1 {
+  padding-top: 28px;
+  padding-bottom: 6px;
+}
+
+.kb-editor-pane .cm-line.cm-kb-h2 {
+  padding-top: 18px;
+  padding-bottom: 4px;
+}
+
+.kb-editor-pane .cm-line.cm-kb-h3 {
+  padding-top: 12px;
+  padding-bottom: 2px;
+}
+
+/* ---- 4. 正文行宽：只约束普通段落，代码块/表格不受限 ----
+   注：用 max-width 约束段落行宽在 CodeMirror 里会影响光标定位与折行测量，
+   这一条按方案允许的「跳过」处理，改为只给段落加轻微的文字排版优化。 */
+.kb-editor-pane .cm-line {
+  text-wrap: pretty;
+}
+
+/* ---- 移动端：代码块字号 13px ---- */
+@media (max-width: 767px) {
+  .kb-editor-pane .cm-line.cm-kb-code,
+  .kb-editor-pane .cm-kb-code {
+    font-size: 13px;
+  }
+
+  .kb-codeb__lang,
+  .kb-codeb__copy {
+    font-size: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kb-codeb__copy {
+    transition: none;
+  }
+}
+
+/* ---- 首页笔记列表：标题下的一行摘要（最多 60 字，已剥掉 Markdown） ---- */
+.kb-note-item__excerpt {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-top: 2px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}

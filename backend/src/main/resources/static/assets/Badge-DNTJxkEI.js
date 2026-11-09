@@ -1,0 +1,1 @@
+import{E as e}from"./index-Du3iQrDE.js";var t=e();function n({tone:e=`neutral`,dot:n=!1,children:r}){return(0,t.jsxs)(`span`,{className:[`kb-badge`,e===`neutral`?``:`kb-badge--${e}`].filter(Boolean).join(` `),children:[n?(0,t.jsx)(`span`,{className:`kb-dot`}):null,r]})}export{n as t};

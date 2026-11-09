@@ -1,0 +1,1345 @@
+/* ==========================================================================
+   外壳布局：登录页 / 应用框架 / 侧栏（目录树 + 笔记列表 + 功能入口）/ 顶栏 / 主区
+   断点体系（FULL.md §4）：
+     桌面 ≥1280 | 笔记本 1024–1279 | 平板 768–1023 | 手机 <768
+   平板起侧栏变抽屉（.kb-app--drawer / .kb-app--drawer-open），手机抽屉全宽。
+   ========================================================================== */
+
+/* ---- 启动探测会话 ------------------------------------------------------ */
+.kb-boot {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+/* ---- 登录页 ------------------------------------------------------------ */
+.kb-login {
+  position: relative;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-5);
+  overflow: hidden;
+  background: var(--bg);
+}
+
+/* 背景光晕：让空页面也有质感（纯装饰，不参与布局） */
+.kb-login::before,
+.kb-login::after {
+  content: '';
+  position: absolute;
+  width: 460px;
+  height: 460px;
+  border-radius: var(--r-full);
+  filter: blur(120px);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.kb-login::before {
+  top: -160px;
+  left: -120px;
+  background: var(--accent);
+}
+
+.kb-login::after {
+  bottom: -200px;
+  right: -140px;
+  background: var(--accent-hover);
+  opacity: 0.3;
+}
+
+.kb-login__card {
+  position: relative;
+  /* auto 外边距居中：内容变高时（注册表单）顶部不会被裁掉，页面自然纵向滚动 */
+  margin: auto;
+  width: min(400px, 100%);
+  padding: var(--sp-6);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-lg);
+  animation: kb-rise-in var(--dur-slow) var(--ease);
+}
+
+/* 登录 / 注册页签：一眼可见的分段控件 */
+.kb-login__tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-1);
+  margin-bottom: var(--sp-5);
+  padding: var(--sp-1);
+  background: var(--bg-subtle);
+  border-radius: var(--r-lg);
+}
+
+.kb-login__tab {
+  height: 34px;
+  border-radius: var(--r-md);
+  color: var(--text-secondary);
+  font-size: var(--fs-base);
+  font-weight: 600;
+  transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease);
+}
+
+.kb-login__tab:hover {
+  color: var(--text);
+}
+
+.kb-login__tab--active {
+  background: var(--surface-raised);
+  color: var(--accent);
+  box-shadow: var(--shadow-sm);
+}
+
+.kb-login__tab--active:hover {
+  color: var(--accent);
+}
+
+.kb-login__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-5);
+}
+
+.kb-login__logo {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--r-lg);
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: var(--shadow);
+}
+
+.kb-login__title {
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  line-height: var(--lh-tight);
+}
+
+.kb-login__subtitle {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.kb-login__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+/* 表单内联错误：契约验收项 4 要求「错误显示在表单里」 */
+.kb-login__error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  margin-top: calc(-1 * var(--sp-1));
+  padding: var(--sp-3);
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: var(--fs-sm);
+  animation: kb-rise-in var(--dur) var(--ease);
+}
+
+.kb-login__error svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.kb-login__foot {
+  margin-top: var(--sp-5);
+  text-align: center;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+/* 悬浮主题切换（登录页与主界面共用） */
+.kb-theme-fab {
+  position: fixed;
+  top: var(--sp-4);
+  right: var(--sp-4);
+  z-index: var(--z-dropdown);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--r-full);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-sm);
+  transition: color var(--dur-fast) var(--ease), transform var(--dur) var(--ease),
+    border-color var(--dur-fast) var(--ease);
+}
+
+.kb-theme-fab:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+
+.kb-theme-fab:active {
+  transform: translateY(0) scale(0.96);
+}
+
+/* ---- 应用框架 ---------------------------------------------------------- */
+.kb-app {
+  display: flex;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+/* 收起后留在最左侧的窄轨，保证「还能展开回来」（仅桌面/笔记本） */
+.kb-rail {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 52px;
+  padding: var(--sp-3) 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+
+.kb-rail__spacer {
+  flex: 1;
+}
+
+/* ---- 侧栏 -------------------------------------------------------------- */
+.kb-sidebar {
+  flex: none;
+  width: var(--sidebar-w);
+  overflow: hidden;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  transition: width var(--dur) var(--ease), border-color var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+
+.kb-app--collapsed .kb-sidebar {
+  width: 0;
+  /* 连右边框一起去掉，否则收起后仍留下 1px 的线 */
+  border-right-width: 0;
+  border-right-color: transparent;
+}
+
+/* 内层固定宽度：宽度动画期间内容不被挤压重排 */
+.kb-sidebar__inner {
+  display: flex;
+  flex-direction: column;
+  width: var(--sidebar-w);
+  height: 100%;
+}
+
+.kb-sidebar__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex: none;
+  padding: var(--sp-3) var(--sp-3) var(--sp-2);
+}
+
+.kb-sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex: 1;
+  min-width: 0;
+  font-weight: 650;
+}
+
+.kb-sidebar__brand-icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: var(--r-sm);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.kb-sidebar__user {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex: none;
+  margin: 0 var(--sp-3) var(--sp-2);
+  padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-3);
+  background: var(--bg-subtle);
+  border-radius: var(--r-lg);
+}
+
+.kb-sidebar__avatar {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: var(--r-full);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.kb-sidebar__user-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.kb-sidebar__user-name {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-sidebar__user-sub {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-sidebar__section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  flex: none;
+  padding: var(--sp-3) var(--sp-2) var(--sp-1) var(--sp-4);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.kb-sidebar__section-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+.kb-sidebar__section-count {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 目录树 + 笔记列表共用的一块可滚动区（两块各自内部滚动） */
+.kb-sidebar__scroll {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: var(--sp-2);
+}
+
+/* ---- 功能入口（由注册表生成）------------------------------------------ */
+.kb-nav {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 2px;
+  padding: var(--sp-1) var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.kb-nav__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  min-height: 44px;
+  padding: var(--sp-2) 2px;
+  border-radius: var(--r-md);
+  color: var(--text-secondary);
+  transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.kb-nav__item:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+
+.kb-nav__item--active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.kb-nav__icon {
+  display: inline-flex;
+  flex: none;
+}
+
+.kb-nav__label {
+  max-width: 100%;
+  font-size: 11px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- 目录树 ------------------------------------------------------------ */
+.kb-tree {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 42%;
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--border);
+}
+
+.kb-tree__head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-2) var(--sp-1) var(--sp-4);
+}
+
+.kb-tree__title {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.kb-tree__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 var(--sp-2) var(--sp-2);
+}
+
+.kb-tree__children {
+  display: flex;
+  flex-direction: column;
+}
+
+.kb-tree__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-3);
+}
+
+.kb-tree__hint {
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.kb-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 30px;
+  border-radius: var(--r-md);
+  transition: background-color var(--dur-fast) var(--ease);
+}
+
+.kb-tree-row:hover {
+  background: var(--bg-subtle);
+}
+
+.kb-tree-row--active {
+  background: var(--accent-soft);
+}
+
+/* 拖拽悬停高亮（含失败前的高亮，失败后由外壳回滚并解除） */
+.kb-tree-row--drop {
+  background: var(--accent-soft);
+  outline: 2px dashed var(--accent);
+  outline-offset: -2px;
+}
+
+.kb-tree-row__twist {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 24px;
+  color: var(--text-muted);
+}
+
+.kb-tree-row__twist svg {
+  transition: transform var(--dur-fast) var(--ease);
+}
+
+.kb-tree-row__twist--open svg {
+  transform: rotate(90deg);
+}
+
+.kb-tree-row__twist--leaf {
+  visibility: hidden;
+}
+
+.kb-tree-row__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 3px 0;
+  text-align: left;
+}
+
+.kb-tree-row__icon {
+  flex: none;
+  display: inline-flex;
+  color: var(--text-muted);
+}
+
+.kb-tree-row__name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-tree-row--active .kb-tree-row__name {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.kb-tree-row__count {
+  flex: none;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.kb-tree-row__actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  opacity: 0;
+}
+
+.kb-tree-row:hover .kb-tree-row__actions,
+.kb-tree-row:focus-within .kb-tree-row__actions {
+  opacity: 1;
+}
+
+.kb-tree-row__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--r-sm);
+  color: var(--text-muted);
+}
+
+.kb-tree-row__action:hover {
+  background: var(--bg-muted);
+  color: var(--text);
+}
+
+.kb-tree-row__action--danger:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* ---- 笔记列表 ---------------------------------------------------------- */
+.kb-note-list-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.kb-note-list {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0 var(--sp-2) var(--sp-4);
+  overflow-y: auto;
+  overflow-x: hidden;
+  list-style: none;
+}
+
+.kb-note-list__notice {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0 var(--sp-3) var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-md);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
+.kb-note-list__notice--error {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.kb-linkish {
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.kb-note-item {
+  position: relative;
+  width: 100%;
+  border-radius: var(--r-md);
+  transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.kb-note-item:hover {
+  background: var(--bg-subtle);
+}
+
+/* 行主体（点它打开笔记）：整行可点，右侧给「⋯」留出位置 */
+.kb-note-item__main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: var(--sp-2) var(--sp-6) var(--sp-2) var(--sp-3);
+  border-radius: inherit;
+  text-align: left;
+}
+
+/* 「⋯」：默认藏起来，悬停/键盘聚焦时出现；触摸设备常驻（见 pointer:coarse 段） */
+.kb-note-item__more {
+  position: absolute;
+  top: 50%;
+  right: 2px;
+  translate: 0 -50%;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--r-sm);
+  color: var(--text-muted);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
+}
+
+.kb-note-item:hover .kb-note-item__more,
+.kb-note-item:focus-within .kb-note-item__more {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.kb-note-item__more:hover {
+  background: var(--bg-muted);
+  color: var(--text);
+}
+
+/* 列表项操作菜单：fixed 定位，避免被列表的滚动容器裁掉 */
+.kb-note-menu {
+  position: fixed;
+  z-index: var(--z-dropdown);
+  min-width: 132px;
+  padding: var(--sp-1);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+  animation: kb-fade-in var(--dur-fast) var(--ease);
+}
+
+.kb-note-menu__item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  text-align: left;
+}
+
+.kb-note-menu__item:hover {
+  background: var(--bg-subtle);
+}
+
+.kb-note-menu__item--danger {
+  color: var(--danger);
+}
+
+.kb-note-menu__item--danger:hover {
+  background: var(--danger-soft);
+}
+
+.kb-note-item--active {
+  background: var(--accent-soft);
+}
+
+/* 选中态左侧竖条 */
+.kb-note-item--active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  translate: 0 -50%;
+  width: 3px;
+  height: 18px;
+  border-radius: var(--r-full);
+  background: var(--accent);
+}
+
+.kb-note-item__title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: var(--fs-base);
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-note-item--active .kb-note-item__title {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.kb-note-item__pin {
+  flex: none;
+  padding: 0 4px;
+  border-radius: var(--r-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.kb-note-item__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.kb-note-item__fav {
+  display: inline-flex;
+  color: var(--warning);
+}
+
+.kb-note-item--dirty .kb-note-item__meta::after {
+  content: '未保存';
+  color: var(--warning);
+  font-weight: 600;
+}
+
+.kb-sidebar__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-3);
+}
+
+.kb-sidebar__skeleton-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+/* ---- 主区域 ------------------------------------------------------------ */
+.kb-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--bg);
+}
+
+.kb-topbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  flex: none;
+  min-height: 52px;
+  padding: var(--sp-2) var(--sp-4);
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+
+.kb-topbar__menu {
+  flex: none;
+}
+
+.kb-topbar__title {
+  flex: none;
+  font-size: var(--fs-md);
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.kb-topbar__subject {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-topbar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex: none;
+  margin-left: auto;
+}
+
+.kb-topbar__search {
+  display: flex;
+}
+
+.kb-topbar__searchrow {
+  flex-basis: 100%;
+  order: 9;
+}
+
+/* 顶栏全局搜索框 */
+.kb-search {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 260px;
+  max-width: 100%;
+  height: 34px;
+  padding: 0 var(--sp-1) 0 var(--sp-3);
+  background: var(--bg-subtle);
+  border: 1px solid transparent;
+  border-radius: var(--r-full);
+  transition: border-color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease);
+}
+
+.kb-search:focus-within {
+  background: var(--surface-raised);
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+
+.kb-search__icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-muted);
+}
+
+.kb-search__input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  background: none;
+  border: none;
+  outline: none;
+  font-size: var(--fs-sm);
+}
+
+.kb-search__input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.kb-search__submit {
+  flex: none;
+  height: 26px;
+  padding: 0 var(--sp-3);
+  border-radius: var(--r-full);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+
+.kb-search__submit:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+/* 保存状态指示器：未保存 / 保存中 / 已保存 / 失败 */
+.kb-save-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: 26px;
+  padding: 0 var(--sp-3);
+  border-radius: var(--r-full);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background-color var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+
+.kb-save-status[data-state='saved'] {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  color: var(--success);
+}
+
+.kb-save-status[data-state='dirty'] {
+  background: color-mix(in srgb, var(--warning) 16%, transparent);
+  color: var(--warning);
+}
+
+.kb-save-status[data-state='saving'] {
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+}
+
+.kb-save-status[data-state='error'] {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.kb-save-status__retry {
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.kb-editor-region {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 编辑器容器：只负责宽度、内边距与「给定高度」。
+   注意：p-editor 的 .kb-editor 是 height:100% + 内部 .cm-scroller 自滚，
+   所以这里必须是 flex 列 + 定高，不能再加 overflow:auto（否则双滚动条）。
+   `--editor-max` 的语义是**正文可用宽度**，所以这里把左右内边距加回去。 */
+.kb-editor-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: calc(var(--editor-max) + var(--sp-5) * 2);
+  margin: 0 auto;
+  padding: var(--sp-6) var(--sp-5) var(--sp-7);
+}
+
+/* 宽屏：占满可用宽度（顶栏「宽屏/窄栏」切换） */
+.kb-editor-region--wide .kb-editor-pane {
+  max-width: none;
+}
+
+.kb-editor-pane > .kb-editor {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* 未选择 / 出错时的占位区 */
+.kb-editor-placeholder {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: var(--sp-6);
+}
+
+.kb-editor-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+/* 视图懒加载 / 降级占位（registry 的容错分支） */
+.kb-view-loading {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.kb-view-fallback {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+}
+
+/* ---- 抽屉遮罩 ---------------------------------------------------------- */
+.kb-drawer-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-modal) - 1);
+  background: var(--scrim);
+  animation: kb-fade-in var(--dur) var(--ease);
+}
+
+/* ==========================================================================
+   断点 1/4：笔记本 1024–1279 —— 侧栏常驻但收窄
+   ========================================================================== */
+@media (max-width: 1279px) {
+  :root {
+    --sidebar-w: 240px;
+    /* 与 tokens.css 的 --editor-max 保持一致（两处都要改） */
+    --editor-max: 860px;
+  }
+
+  .kb-search {
+    width: 210px;
+  }
+}
+
+/* ==========================================================================
+   断点 2/4：平板 768–1023（+ 手机）—— 侧栏变抽屉、默认收起、点遮罩关闭
+   ========================================================================== */
+@media (max-width: 1023px) {
+  .kb-app--drawer .kb-sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: var(--z-modal);
+    width: var(--sidebar-w);
+    box-shadow: var(--shadow-lg);
+    transform: translateX(-100%);
+  }
+
+  .kb-app--drawer-open .kb-sidebar {
+    transform: none;
+  }
+
+  /* 抽屉模式不需要窄轨：展开入口在顶栏 */
+  .kb-app--drawer .kb-rail {
+    display: none;
+  }
+
+  .kb-sidebar__inner {
+    width: var(--sidebar-w);
+  }
+
+  .kb-topbar {
+    padding: var(--sp-2) var(--sp-3);
+  }
+
+  .kb-editor-pane {
+    padding: var(--sp-5) var(--sp-4) var(--sp-6);
+    max-width: calc(var(--editor-max) + var(--sp-4) * 2);
+  }
+
+  .kb-search {
+    width: 190px;
+  }
+}
+
+/* ==========================================================================
+   断点 3/4：手机 <768 —— 单栏、抽屉全宽、--sidebar-w 不参与布局
+   ========================================================================== */
+@media (max-width: 767px) {
+  .kb-app--drawer .kb-sidebar {
+    width: 100vw;
+  }
+
+  .kb-app--drawer .kb-sidebar__inner {
+    width: 100%;
+  }
+
+  .kb-topbar {
+    min-height: 48px;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-3);
+  }
+
+  .kb-topbar__subject {
+    display: none;
+  }
+
+  .kb-save-status__time {
+    display: none;
+  }
+
+  .kb-search {
+    width: 100%;
+  }
+
+  .kb-editor-pane {
+    padding: var(--sp-4) var(--sp-3) var(--sp-6);
+  }
+
+  .kb-editor-placeholder {
+    padding: var(--sp-4);
+  }
+
+  .kb-tree {
+    max-height: 36%;
+  }
+}
+
+/* ==========================================================================
+   断点 4/4：触摸设备 —— 可点区域 ≥44×44px，
+   悬停才出现的操作常驻（否则触摸设备上永远点不到）
+   ========================================================================== */
+@media (pointer: coarse) {
+  .kb-btn {
+    min-height: 44px;
+  }
+
+  .kb-btn--icon {
+    width: 44px;
+    height: 44px;
+  }
+
+  .kb-btn--sm {
+    min-height: 44px;
+    padding: 0 var(--sp-4);
+  }
+
+  .kb-nav__item {
+    min-height: 52px;
+  }
+
+  .kb-tree-row {
+    min-height: 44px;
+  }
+
+  /* 展开/折叠箭头：必须 ≥44×44（窄屏下曾只有 32px 宽）。
+     行内左侧留给目录名的宽度由 .kb-tree-row__main 的 flex:1 + min-width:0 保证，
+     目录名过长时走省略号，不会挤压布局、也不产生横向溢出。 */
+  .kb-tree-row__twist {
+    width: 44px;
+    height: 44px;
+  }
+
+  .kb-tree-row__actions {
+    opacity: 1;
+  }
+
+  .kb-tree-row__action {
+    width: 44px;
+    height: 44px;
+  }
+
+  /* 触摸设备不能依赖 hover：列表项操作常驻可见，且 ≥44×44 */
+  .kb-note-item {
+    min-height: 52px;
+    padding: 0;
+  }
+
+  .kb-note-item__main {
+    padding: var(--sp-3);
+    padding-right: 52px;
+  }
+
+  .kb-note-item__more {
+    opacity: 1;
+    pointer-events: auto;
+    right: 0;
+    width: 44px;
+    height: 44px;
+  }
+
+  .kb-note-menu__item {
+    min-height: 44px;
+  }
+
+  .kb-search {
+    height: 44px;
+  }
+
+  .kb-search__submit {
+    height: 44px;
+    padding: 0 var(--sp-4);
+  }
+
+  .kb-save-status {
+    height: 44px;
+  }
+
+  /* 保存失败时的「重试」文字按钮：整块 44px 高，避免只有一行文字的窄条 */
+  .kb-save-status__retry {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 var(--sp-2);
+  }
+
+  .kb-tree-row__main {
+    min-height: 44px;
+  }
+
+  /* 登录/注册页签 */
+  .kb-login__tab {
+    min-height: 44px;
+  }
+}
+/* ==========================================================================
+   顶栏笔记标题：点击即重命名（F 流新增，DEF-E4-001）
+   —— 显示态是 button（可键盘聚焦），编辑态是同 class 的 input
+   ========================================================================== */
+button.kb-topbar__subject {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  max-width: 42vw;
+  padding: 2px var(--sp-2);
+  margin-left: var(--sp-1);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  font: inherit;
+  color: inherit;
+  cursor: text;
+}
+
+button.kb-topbar__subject:hover,
+button.kb-topbar__subject:focus-visible {
+  background: var(--bg-subtle);
+  border-color: var(--border);
+  outline: none;
+}
+
+.kb-topbar__subject-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-topbar__subject-pen {
+  flex: none;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  opacity: 0.55;
+}
+
+button.kb-topbar__subject:hover .kb-topbar__subject-pen {
+  opacity: 1;
+}
+
+.kb-topbar__subject--editing {
+  min-width: 180px;
+  max-width: 46vw;
+  padding: 2px var(--sp-2);
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: var(--r-sm);
+  outline: none;
+}
+
+/* ==========================================================================
+   移动端体验（F 流新增，DEF 响应式优化项）
+   ≤767px：触控目标 ≥40px、弹窗全屏化、长文本折行
+   ========================================================================== */
+@media (max-width: 767px) {
+  /* 触控目标不小于 40px（图标按钮同时保证宽度） */
+  .kb-btn {
+    min-height: 40px;
+  }
+
+  .kb-btn--sm {
+    min-height: 40px;
+  }
+
+  .kb-btn--icon {
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  .kb-tree-row__main {
+    min-height: 40px;
+  }
+
+  .kb-note-item__main {
+    min-height: 44px;
+  }
+
+  .kb-note-item__more {
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  /* 弹窗窄屏全屏化 */
+  .kb-scrim {
+    padding: 0;
+    place-items: stretch;
+  }
+
+  .kb-modal {
+    width: 100%;
+    max-width: 100%;
+    height: 100%;
+    max-height: 100%;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .kb-modal__body {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .kb-modal__footer {
+    padding-bottom: calc(var(--sp-5) + env(safe-area-inset-bottom));
+  }
+
+  /* 长文本折行：标题/列表/空态不再被拉成单行 */
+  .kb-note-item__title,
+  .kb-empty__title,
+  .kb-topbar__title,
+  .kb-modal__title {
+    overflow-wrap: anywhere;
+  }
+
+  .kb-note-item__title {
+    white-space: normal;
+  }
+}
+
+/* 窄屏顶栏标题仍隐藏（改名入口走笔记项菜单「重命名」） */
+@media (max-width: 767px) {
+  button.kb-topbar__subject {
+    display: none;
+  }
+}
+

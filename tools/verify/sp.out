@@ -1,0 +1,1 @@
+static+proxy on http://127.0.0.1:8096 root=D:\deepseekhums\work\知识库\backend\src\main\resources\static api=http://127.0.0.1:8095

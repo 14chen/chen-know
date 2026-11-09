@@ -1,0 +1,87 @@
+/* 速览块（编辑器上方，命名空间 kb-digest-*）—— 只用 tokens.css 变量 */
+
+.kb-digest {
+  flex: none;
+  margin: 0 var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-subtle);
+  overflow: hidden;
+}
+
+.kb-digest.is-open {
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.kb-digest__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  width: 100%;
+  min-height: 40px;
+  padding: var(--sp-2) var(--sp-3);
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.kb-digest__head:hover {
+  background: var(--bg-muted);
+}
+
+.kb-digest__head:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
+.kb-digest__title {
+  font-size: var(--fs-sm);
+  font-weight: 650;
+  color: var(--text);
+}
+
+.kb-digest__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex: none;
+}
+
+.kb-digest__chip {
+  padding: 1px 6px;
+  border-radius: var(--r-full);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--fs-xs);
+}
+
+.kb-digest__toggle {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.kb-digest__text {
+  margin: 0;
+  padding: 0 var(--sp-3) var(--sp-3);
+  font-size: var(--fs-sm);
+  line-height: 1.7;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 767px) {
+  .kb-digest {
+    margin: 0 var(--sp-2);
+  }
+}
+
+@media (pointer: coarse) {
+  .kb-digest__head {
+    min-height: 44px;
+  }
+}

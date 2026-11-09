@@ -1,0 +1,211 @@
+/* ==========================================================================
+   关系图视图（views/graph/index.tsx）—— 命名空间 vw-graph-*
+   只使用 tokens.css 的变量；SVG 自己缩放平移，页面不得横向溢出
+   ========================================================================== */
+
+.vw-graph {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.vw-graph__head {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.vw-graph__heading {
+  min-width: 0;
+}
+
+.vw-graph__title {
+  font-size: var(--fs-lg);
+  font-weight: 680;
+  line-height: var(--lh-tight);
+}
+
+.vw-graph__sub {
+  margin-top: 2px;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.vw-graph__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.vw-graph__body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4) var(--sp-4);
+}
+
+.vw-graph__faint {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.vw-graph__state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  padding: var(--sp-6) var(--sp-4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
+.vw-graph__hint {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+
+.vw-graph__hint code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  padding: 0 4px;
+  border-radius: var(--r-sm);
+  background: var(--bg-muted);
+}
+
+/* SVG 画布：自己处理滚轮/拖拽，别让浏览器滚动页面 */
+.vw-graph__svg {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-sm);
+  touch-action: none;
+  cursor: grab;
+  overflow: hidden;
+}
+
+.vw-graph__svg:active {
+  cursor: grabbing;
+}
+
+.vw-graph__edge {
+  stroke: var(--border-strong);
+  stroke-width: 1.2;
+  transition: opacity 120ms ease;
+}
+
+.vw-graph__edge.is-active {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.vw-graph__edge.is-dim {
+  opacity: 0.25;
+}
+
+.vw-graph__node {
+  cursor: pointer;
+  transition: opacity 120ms ease;
+}
+
+.vw-graph__node.is-dim {
+  opacity: 0.35;
+}
+
+/* 命中区：透明但可点，避免只点到圆点或文字本身 */
+.vw-graph__hit {
+  fill: transparent;
+  stroke: none;
+  pointer-events: all;
+}
+
+.vw-graph__dot {
+  fill: var(--accent);
+  stroke: var(--surface);
+  stroke-width: 1.5;
+}
+
+.vw-graph__dot.is-isolated {
+  fill: var(--text-muted);
+}
+
+.vw-graph__node.is-hover .vw-graph__dot {
+  fill: var(--accent-hover);
+  stroke-width: 2.5;
+}
+
+.vw-graph__label {
+  font-size: 11px;
+  fill: var(--text-secondary);
+  pointer-events: none;
+  user-select: none;
+}
+
+.vw-graph__node.is-hover .vw-graph__label {
+  fill: var(--text);
+  font-weight: 600;
+}
+
+@media (max-width: 767px) {
+  .vw-graph__head {
+    padding: var(--sp-3) var(--sp-4);
+  }
+
+  .vw-graph__actions {
+    width: 100%;
+  }
+
+  .vw-graph__actions .kb-btn {
+    flex: 1 1 70px;
+  }
+
+  .vw-graph__body {
+    padding: var(--sp-2) var(--sp-3) var(--sp-3);
+  }
+
+  .vw-graph__label {
+    font-size: 9px;
+  }
+}
+
+/* 触摸设备：可点区域 ≥44px */
+@media (pointer: coarse) {
+  .vw-graph .kb-btn {
+    min-height: 44px;
+    padding: 0 var(--sp-3);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vw-graph__edge,
+  .vw-graph__node {
+    transition: none;
+  }
+}

@@ -1,0 +1,196 @@
+/* ==========================================================================
+   搜索视图的增补样式（命名空间 vw-search-*）—— 只用 tokens.css 变量
+   ========================================================================== */
+
+.vw-search-flag {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: var(--r-full);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+
+/* 日期范围：两个输入并排，窄屏自动换行 */
+.vw-search-dates {
+  display: flex;
+  gap: var(--sp-2);
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.vw-search-dates > * {
+  flex: 1 1 130px;
+  min-width: 0;
+}
+
+/* 结果里的 snippet：纯文本 + <strong> 加粗，保留两端省略号 */
+.vw-search-snippet {
+  display: block;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  line-height: 1.6;
+}
+
+.vw-search-snippet strong {
+  font-weight: 700;
+  color: var(--text);
+  background: var(--accent-soft);
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+@media (max-width: 767px) {
+  .vw-search-dates > * {
+    flex: 1 1 100%;
+  }
+}
+
+/* ===== H3/H4：联想词 / 历史浮层 + 空结果分流 ===== */
+.vw-search-field {
+  position: relative;
+  min-width: 0;
+}
+
+.vw-search-pop {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+
+.vw-search-pop__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: 4px 8px 6px;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.vw-search-pop__clear {
+  border: 0;
+  background: none;
+  padding: 2px 4px;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+  border-radius: var(--r-sm);
+}
+
+.vw-search-pop__clear:hover {
+  text-decoration: underline;
+}
+
+.vw-search-pop__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.vw-search-pop__row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.vw-search-pop__item {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  font: inherit;
+  font-size: var(--fs-sm);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.vw-search-pop__item.is-active,
+.vw-search-pop__item:hover {
+  background: var(--accent-soft);
+}
+
+.vw-search-pop__icon {
+  flex: none;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.vw-search-pop__text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vw-search-pop__kind {
+  flex: none;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.vw-search-pop__x {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.vw-search-pop__x:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.vw-search-blocked {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  align-items: flex-start;
+}
+
+.vw-search-blocked__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.vw-search-blocked__hint {
+  color: var(--accent);
+  font-weight: 650;
+}
+
+@media (max-width: 767px) {
+  .vw-search-pop {
+    max-width: calc(100vw - 24px);
+  }
+}
+
+@media (pointer: coarse) {
+  .vw-search-pop__item {
+    min-height: 44px;
+  }
+}

@@ -1,0 +1,26 @@
+import { launch } from './cdp.mjs'
+const sleep = (ms) => new Promise(r => setTimeout(r, ms))
+const b = await launch({ width: 1400, height: 900 })
+try {
+  const p = await b.newPage('http://127.0.0.1:8090/')
+  await p.waitForLoad()
+  await p.waitFor('!!document.querySelector(String.fromCharCode(105,110,112,117,116))', { timeout: 5000 }).catch(() => {})
+  await p.waitFor("!!document.querySelector('input[name=\"username\"]')", { timeout: 20000 })
+  await p.eval("(() => { const u=document.querySelector('input[name=\"username\"]'); const pw=document.querySelector('input[name=\"password\"]'); const s=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set; s.call(u,'r7user'); u.dispatchEvent(new Event('input',{bubbles:true})); s.call(pw,'R7Pass1234!'); pw.dispatchEvent(new Event('input',{bubbles:true})); })()")
+  await sleep(300)
+  await p.click('button.kb-btn--primary')
+  await p.waitFor("!!document.querySelector('.kb-app')", { timeout: 30000 })
+  await sleep(2500)
+  const navSel = '.kb-sidebar a, .kb-sidebar button'
+  const navs = await p.eval("JSON.stringify([...document.querySelectorAll('" + navSel + "')].map(e => (e.textContent||'').trim()).filter(Boolean).slice(0,30))")
+  console.log('  侧栏项:', navs)
+  console.log('  含「AI 简报」:', navs.includes('AI 简报'))
+  const clicked = await p.eval("(() => { const el=[...document.querySelectorAll('" + navSel + "')].find(e=>(e.textContent||'').trim()==='AI 简报'); if(!el) return 'NOT_FOUND'; el.click(); return 'clicked'; })()")
+  console.log('  点击结果:', clicked)
+  await sleep(2200)
+  console.log('  当前 hash:', await p.eval('location.hash'))
+  console.log('  有「立即生成」:', await p.eval("[...document.querySelectorAll('button')].some(b => /立即生成/.test(b.textContent||''))"))
+  const txt = await p.eval('document.body.innerText')
+  console.log('  页面文本:', String(txt).replace(/\n/g, ' | ').slice(0, 180))
+  await p.screenshot('D:/deepseekhums/work/知识库/tools/verify/shots/round7-briefing-nav.png')
+} finally { await b.close() }

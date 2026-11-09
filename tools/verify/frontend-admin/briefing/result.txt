@@ -1,0 +1,32 @@
+PASS  加载态：挂载瞬间出现骨架屏
+PASS  加载态：数据到达后渲染两张表
+PASS  源状态表：4 条源全部渲染
+PASS  源状态表：链接可点且目标正确（新窗口 + noopener）
+PASS  源状态表：三种类型都有中文标签
+PASS  源状态表：暴露最近一次每源状态（含失败源）
+PASS  运行历史：渲染已有的 2 次运行
+PASS  运行历史：点「打开简报」调用 ctx.openNote(3)
+PASS  立即生成：回显「新内容 N 条 / 共检查 M 条」
+PASS  立即生成：成功 toast + 历史刷新后能看到新 run
+PASS  立即生成：新 run 出现在历史里（3 条）
+PASS  立即生成：结果区的「打开简报」跳到 noteId=3
+PASS  sourceReport 是数组时也能解析（页面未崩）
+PASS  parseSourceReport：空数组/数组/坏 JSON/null 都安全
+PASS  空态：没有运行记录时给出引导
+PASS  错误态：展示失败提示 + 重试按钮
+PASS  错误态：点重试后恢复
+PASS  409 并发：给出 warn 提示而不是错误
+PASS  #1440×900：无横向溢出
+PASS  #1440：按钮可见
+PASS  #1180×800：无横向溢出
+PASS  #1180：按钮可见
+PASS  #900×700：无横向溢出
+PASS  #900：按钮可见
+PASS  #390×844：无横向溢出
+PASS  #390：按钮可见
+PASS  390×844 触摸模拟：pointer: coarse 生效
+PASS  触摸设备：操作按钮高度 ≥44px
+PASS  触摸设备：表格内「打开简报」≥44px
+PASS  全局：无 console 错误 / 未捕获异常
+
+RESULT passed 30/30

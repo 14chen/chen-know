@@ -1,0 +1,141 @@
+/* ==========================================================================
+   设计 token —— 契约 PROTOTYPE.md §3 冻结的变量名；取值由 p-shell 定义。
+   p-editor 只许引用这些变量，不得自己写颜色字面量。
+   主题机制：<html data-theme="light|dark">，由 src/shell/theme.ts 与 index.html 引导脚本维护。
+   ========================================================================== */
+
+:root {
+  /* 间距 ---------------------------------------------------------------- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+
+  /* 圆角 ---------------------------------------------------------------- */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 16px;
+  --r-xl: 24px;
+  --r-full: 999px;
+
+  /* 字号 ---------------------------------------------------------------- */
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-base: 14px;
+  --fs-md: 15px;
+  --fs-lg: 18px;
+  --fs-xl: 22px;
+  --fs-2xl: 28px;
+
+  /* 行高 ---------------------------------------------------------------- */
+  --lh-tight: 1.25;
+  --lh-normal: 1.6;
+  --lh-relaxed: 1.85;
+
+  /* 动效 ---------------------------------------------------------------- */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 120ms;
+  --dur: 200ms;
+  --dur-slow: 360ms;
+
+  /* 层级 ---------------------------------------------------------------- */
+  --z-dropdown: 100;
+  --z-modal: 200;
+  --z-toast: 300;
+
+  /* 布局 ---------------------------------------------------------------- */
+  --sidebar-w: 288px;
+  /* 编辑器（正文）可用宽度；宽屏模式下由顶栏切换为占满。
+     改动时请同步 frontend/src/styles/shell.css 里 ≤1279px 的同名覆盖值。 */
+  --editor-max: 860px;
+
+  /* 字体（契约之外的补充 token，供全站复用）----------------------------- */
+  --font-sans: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei',
+    'Noto Sans CJK SC', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Mono', 'SFMono-Regular', Consolas,
+    'Liberation Mono', monospace;
+
+  /* ---- 浅色主题（默认）------------------------------------------------ */
+  color-scheme: light;
+
+  --bg: #f6f7f9;
+  --bg-subtle: #eef0f4;
+  --bg-muted: #e5e8ee;
+
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+
+  --border: #e4e7ed;
+  --border-strong: #cbd1dc;
+
+  --text: #191c22;
+  --text-secondary: #545c6a;
+  --text-muted: #878f9d;
+
+  --accent: #4f46e5;
+  --accent-hover: #4338ca;
+  --accent-soft: rgba(79, 70, 229, 0.1);
+  /* 选中文字的背景：必须一眼可见，不能复用 10% 的 accent-soft */
+  --selection-bg: rgba(79, 70, 229, 0.3);
+
+  --danger: #dc2626;
+  --danger-soft: rgba(220, 38, 38, 0.1);
+  --success: #16a34a;
+  --warning: #c2740a;
+
+  --code-bg: #f1f2f6;
+  --code-text: #a1216b;
+
+  --shadow-sm: 0 1px 2px rgba(19, 25, 38, 0.06), 0 1px 3px rgba(19, 25, 38, 0.04);
+  --shadow: 0 4px 14px rgba(19, 25, 38, 0.08), 0 1px 3px rgba(19, 25, 38, 0.04);
+  --shadow-lg: 0 20px 44px rgba(19, 25, 38, 0.16), 0 4px 12px rgba(19, 25, 38, 0.07);
+
+  /* 契约之外的派生 token ------------------------------------------------ */
+  --on-accent: #ffffff;
+  --ring: 0 0 0 3px rgba(79, 70, 229, 0.28);
+  --scrim: rgba(19, 23, 33, 0.42);
+}
+
+/* ---- 深色主题 ---------------------------------------------------------- */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg: #101216;
+  --bg-subtle: #171a20;
+  --bg-muted: #20242c;
+
+  --surface: #171a20;
+  --surface-raised: #21252e;
+
+  --border: #272c35;
+  --border-strong: #3a414f;
+
+  --text: #e9ebf0;
+  --text-secondary: #a6aebc;
+  --text-muted: #757e8c;
+
+  --accent: #8b93f8;
+  --accent-hover: #a8affc;
+  --accent-soft: rgba(139, 147, 248, 0.16);
+  /* 深色底上同样要清晰可见 */
+  --selection-bg: rgba(139, 147, 248, 0.4);
+
+  --danger: #f87171;
+  --danger-soft: rgba(248, 113, 113, 0.15);
+  --success: #4ade80;
+  --warning: #fbbf24;
+
+  --code-bg: #23272f;
+  --code-text: #f0abfc;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow: 0 6px 18px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 24px 52px rgba(0, 0, 0, 0.6), 0 6px 16px rgba(0, 0, 0, 0.4);
+
+  --on-accent: #14161c;
+  --ring: 0 0 0 3px rgba(139, 147, 248, 0.32);
+  --scrim: rgba(0, 0, 0, 0.56);
+}

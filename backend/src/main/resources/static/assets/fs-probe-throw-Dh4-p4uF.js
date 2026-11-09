@@ -1,0 +1,1 @@
+function e(e){throw Error(`FS-PROBE 故意抛错`)}export{e as default};

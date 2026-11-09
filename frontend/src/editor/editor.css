@@ -1,0 +1,265 @@
+/* 编辑器外壳与提示条（CodeMirror 内部 DOM 的样式全部在 theme.ts 的 theme spec 里） */
+
+.kb-editor {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.kb-editor-host {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.kb-editor-host > .cm-editor {
+  height: 100%;
+}
+
+.kb-editor-host > .cm-editor.cm-focused {
+  outline: none;
+}
+
+.kb-toasts {
+  position: absolute;
+  left: 50%;
+  bottom: var(--sp-6);
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  align-items: center;
+  pointer-events: none;
+  max-width: min(560px, 80%);
+}
+
+.kb-toast {
+  padding: var(--sp-2) var(--sp-4);
+  border-radius: var(--r-md);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  z-index: var(--z-toast);
+}
+
+.kb-toast-error {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* ══════════════════════════════════════════════════════════
+ * 选区格式工具栏（docs/EDITOR-FORMAT.md §4）
+ * ══════════════════════════════════════════════════════════ */
+
+.kb-fmt-toolbar {
+  position: fixed;
+  z-index: var(--z-dropdown);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  animation: kb-fmt-in var(--dur-fast) var(--ease);
+}
+
+@keyframes kb-fmt-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.kb-fmt-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 6px;
+  border: none;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.kb-fmt-btn:hover {
+  background: var(--bg-muted);
+}
+
+.kb-fmt-btn.is-on {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.kb-fmt-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.kb-fmt-svg {
+  display: block;
+}
+
+.kb-fmt-caret {
+  width: 0;
+  height: 0;
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-top: 4px solid currentColor;
+  opacity: 0.55;
+}
+
+/* 图标：用 currentColor 的排版字形，两种主题下都清晰 */
+.kb-ico {
+  font-size: 14px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.kb-ico-bold {
+  font-weight: 800;
+}
+.kb-ico-italic {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+  font-weight: 600;
+}
+.kb-ico-strike {
+  text-decoration: line-through;
+  font-weight: 600;
+}
+.kb-ico-underline {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-weight: 600;
+}
+.kb-ico-highlight {
+  background: #fef08a;
+  color: #1f2328;
+  border-radius: 3px;
+  padding: 0 2px;
+  font-weight: 600;
+}
+.kb-ico-code {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11px;
+  letter-spacing: -0.5px;
+}
+.kb-ico-color,
+.kb-ico-bg {
+  flex-direction: column;
+  gap: 1px;
+  font-weight: 600;
+}
+.kb-ico-color i,
+.kb-ico-bg i {
+  display: block;
+  width: 14px;
+  height: 3px;
+  border-radius: 1px;
+}
+.kb-ico-bg i {
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid var(--border-strong);
+}
+
+/* ── 调色板下拉 ─────────────────────────────────────── */
+.kb-fmt-palette {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 4px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding: 8px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+}
+
+.kb-fmt-below .kb-fmt-palette {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
+.kb-fmt-swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: var(--r-full);
+  border: 1px solid var(--border-strong);
+  cursor: pointer;
+  position: relative;
+}
+
+.kb-fmt-swatch.is-on {
+  box-shadow: 0 0 0 2px var(--surface-raised), 0 0 0 4px var(--accent);
+}
+
+.kb-fmt-swatch-none {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--bg-muted),
+    var(--bg-muted) 4px,
+    var(--surface-raised) 4px,
+    var(--surface-raised) 8px
+  );
+}
+
+/* ── 触摸设备：固定底部、按钮 ≥44×44 ─────────────────── */
+@media (pointer: coarse) {
+  .kb-fmt-toolbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: 0;
+    /* 390px 宽放不下 10×44，换行而不是横向滚动 —— 所有按钮必须直接点得到 */
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 2px;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+  }
+
+  .kb-fmt-btn {
+    min-width: 44px;
+    height: 44px;
+    flex: 0 0 auto;
+  }
+
+  .kb-fmt-palette {
+    left: 8px;
+    right: 8px;
+    bottom: calc(100% + 6px);
+    top: auto;
+    grid-template-columns: repeat(8, 1fr);
+  }
+
+  .kb-fmt-swatch {
+    width: 40px;
+    height: 40px;
+  }
+}

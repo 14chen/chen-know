@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="./icons/icon-192.png" type="image/png" />
+    <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#4f46e5" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="知识库" />
+    <title>知识库</title>
+    <script>
+      /* 主题引导：在任何样式生效前定好 data-theme，避免刷新时白/黑闪一下。
+         与旧版共用 localStorage 键 kb.theme；旧版用 JSON.stringify 存值（形如 "dark"），
+         这里读取时两种写法都兼容，写入时保持与旧版一致的 JSON 形态。 */
+      (function () {
+        try {
+          var raw = localStorage.getItem('kb.theme')
+          var theme = null
+          if (raw) {
+            try {
+              theme = JSON.parse(raw)
+            } catch (e) {
+              theme = raw
+            }
+          }
+          if (theme !== 'light' && theme !== 'dark') {
+            theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+          }
+          document.documentElement.setAttribute('data-theme', theme)
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'light')
+        }
+      })()
+    </script>
+    <script type="module" crossorigin src="/assets/index-Du3iQrDE.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/dist-BjCbXaHj.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-t4I17aVt.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

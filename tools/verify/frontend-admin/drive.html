@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<title>kb-drive</title>
+<link rel="stylesheet" href="/assets/css/app.css">
+<link rel="stylesheet" href="/assets/css/features-admin.css">
+</head>
+<body>
+<div id="toast-container" class="toast-container" aria-live="polite"></div>
+<div id="modal-root" class="modal-root" hidden></div>
+<div id="context-menu-root" class="context-menu-root" hidden></div>
+<div id="host"></div>
+<pre id="report">running</pre>
+
+<script>
+window.__xss = false;
+window.alert = function () { window.__xss = true; };
+window.__errs = [];
+(function () {
+  var orig = console.error;
+  console.error = function () {
+    window.__errs.push('[console.error] ' + Array.prototype.map.call(arguments, function (a) { return String((a && a.stack) || a); }).join(' '));
+    orig.apply(console, arguments);
+  };
+})();
+window.addEventListener('error', function (e) { window.__errs.push('[onerror] ' + (e.message || '')); });
+window.addEventListener('unhandledrejection', function (e) { window.__errs.push('[rejection] ' + String((e.reason && e.reason.message) || e.reason)); });
+</script>
+
+<script type="module">
+import * as ui from '/assets/js/ui.js';
+import { api } from '/assets/js/api.js';
+import { store } from '/assets/js/store.js';
+import trashView from '/assets/js/views/trash.js';
+import ioView from '/assets/js/views/io.js';
+import statsView from '/assets/js/views/stats.js';
+import adminView from '/assets/js/views/admin.js';
+
+const T = [];
+const TRACE = [];
+const trace = (label, l) => TRACE.push(label + ': ' + urls(l).join(' | '));
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const check = (name, ok, extra) => T.push({ name, ok: !!ok, extra: extra === undefined || extra === null ? '' : String(extra) });
+
+async function until(fn, timeout = 4000) {
+  const t0 = Date.now();
+  for (;;) {
+    let v = false;
+    try { v = await fn(); } catch { v = false; }
+    if (v) return true;
+    if (Date.now() - t0 > timeout) return false;
+    await sleep(20);
+  }
+}
+const resetLog = () => fetch('/__reset', { method: 'POST' });
+const getLog = async () => (await (await fetch('/__log')).json()).requests;
+const urls = (l) => l.map((x) => x.method + ' ' + x.url.split('?')[0]);
+const nOf = (l, m, u) => urls(l).filter((x) => x === m + ' ' + u).length;
+
+function makeCtx(viewId, opts = {}) {
+  const isAdmin = !!opts.isAdmin;
+  const user = opts.user || { id: isAdmin ? 1 : 9, username: isAdmin ? 'alice' : 'bob', displayName: isAdmin ? '爱丽丝' : '鲍勃', role: isAdmin ? 'admin' : 'member' };
+  const b = {
+    calls: { refreshTree: 0, opened: [], navigated: [] },
+    toasts: [], confirms: [], forms: [], copied: [], cleanups: [], prompts: 0,
+  };
+  const ctx = {
+    api, store,
+    toast: (msg, type) => { b.toasts.push({ msg: String(msg), type }); return () => {}; },
+    confirmDialog: async (o) => { b.confirms.push(o); return b.confirmQueue.length ? b.confirmQueue.shift() : false; },
+    promptDialog: async () => { b.prompts += 1; return null; },
+    formDialog: async (o) => { b.forms.push(o); return b.formQueue.length ? b.formQueue.shift() : null; },
+    contextMenu: ui.contextMenu,
+    openModal: ui.openModal,
+    el: ui.h, esc: ui.esc, skeleton: ui.skeleton, emptyState: ui.emptyState, errorBox: ui.errorBox,
+    formatDate: ui.formatDate, relativeTime: ui.relativeTime, formatBytes: ui.formatBytes,
+    debounce: ui.debounce, copyText: async (t) => { b.copied.push(t); return true; },
+    renderMarkdown: (s) => s, toPlainText: (s) => s,
+    navigate: (v) => b.calls.navigated.push(v),
+    openNote: (id) => b.calls.opened.push(id),
+    refreshTree: async () => { b.calls.refreshTree += 1; },
+    currentUser: user, isAdmin,
+    route: { view: viewId, params: {}, meta: {} },
+    panes: { tree: document.createElement('div'), editor: document.createElement('div'), preview: document.createElement('div') },
+    showPanes: () => {}, setPaneVisible: () => {},
+    onCleanup: (fn) => b.cleanups.push(fn),
+    onDirtyCheck: () => () => {},
+  };
+  b.ctx = ctx;
+  b.confirmQueue = [];
+  b.formQueue = [];
+  return b;
+}
+
+function unmountView(view, b) {
+  try { view.unmount(); } catch (e) { window.__errs.push('[unmount] ' + e.message); }
+  for (const fn of b.cleanups.splice(0)) { try { fn(); } catch (e) { window.__errs.push('[cleanup] ' + e.message); } }
+}
+
+const host = document.getElementById('host');
+const newHost = () => { const d = document.createElement('div'); host.append(d); return d; };
+
+/* ================================================================ trash */
+async function phaseTrash() {
+  const h1 = newHost();
+  const b = makeCtx('trash');
+  await resetLog();
+  await trashView.mount(h1, b.ctx);
+  await until(() => h1.querySelectorAll('.trash-row').length > 0);
+
+  let l = await getLog();
+  check('trash 挂载: GET /api/trash 恰好 1 次', nOf(l, 'GET', '/api/trash') === 1, urls(l).join(' | '));
+  check('trash: 笔记与目录两个区块都渲染', h1.querySelectorAll('.trash-group').length === 2 && h1.querySelectorAll('.trash-row').length === 4, 'groups=' + h1.querySelectorAll('.trash-group').length + ' rows=' + h1.querySelectorAll('.trash-row').length);
+  check('trash: 目录按契约 noteCount 显示包含的笔记数', /含 5 篇笔记/.test(h1.textContent), (h1.querySelector('.trash-row[data-id="21"] .trash-row-meta') || {}).textContent);
+  check('trash: 笔记显示来源目录（folderName 为空显示未分类）', /来自「技术」/.test(h1.textContent) && /未分类/.test(h1.textContent), (h1.querySelector('.trash-row[data-id="12"] .trash-row-meta') || {}).textContent);
+  check('trash: 显示相对删除时间', /删除于/.test(h1.textContent));
+  const xssFolderCell = h1.querySelector('.trash-row[data-id="13"] .trash-row-meta');
+  check('trash: folderName 里的 XSS 载荷按文本渲染', !!xssFolderCell && xssFolderCell.textContent.indexOf('<img src=x onerror=alert(1)>') >= 0 && h1.querySelector('.trash-row[data-id="13"] img') === null && !window.__xss, xssFolderCell ? xssFolderCell.textContent : 'no-cell');
+  TRACE.push('trash 目录行渲染文本: ' + h1.querySelector('.trash-row[data-id="21"] .trash-row-meta').textContent);
+  TRACE.push('trash 笔记行渲染文本: ' + h1.querySelector('.trash-row[data-id="12"] .trash-row-meta').textContent);
+  TRACE.push('trash folderName(含载荷) 渲染文本: ' + xssFolderCell.textContent);
+  check('trash: 标题 XSS 按文本渲染', h1.querySelectorAll('.trash-row img').length === 0 && !window.__xss, 'imgs=' + h1.querySelectorAll('.trash-row img').length);
+
+  const staleBtn = h1.querySelector('.trash-row[data-id="11"] button[data-act="restore"]');
+  h1.querySelector('.trash-row[data-id="11"] button[data-act="restore"]').click();
+  await until(async () => (await getLog()).some((x) => x.url === '/api/trash/notes/11/restore'));
+  l = await getLog();
+  check('trash 恢复: POST /api/trash/notes/11/restore', nOf(l, 'POST', '/api/trash/notes/11/restore') === 1, urls(l).join(' | '));
+  check('trash 恢复: 调用了 ctx.refreshTree()', b.calls.refreshTree === 1);
+  await until(() => h1.querySelectorAll('.trash-row').length === 3);
+  check('trash 恢复: 列表即时移除该条', h1.querySelectorAll('.trash-row').length === 3);
+
+  b.confirmQueue.push(true);
+  h1.querySelector('.trash-row[data-id="12"] button[data-act="purge"]').click();
+  await until(async () => (await getLog()).some((x) => x.url === '/api/trash/notes/12'));
+  l = await getLog();
+  check('trash 彻底删除: DELETE /api/trash/notes/12', nOf(l, 'DELETE', '/api/trash/notes/12') === 1, urls(l).join(' | '));
+  check('trash 彻底删除: 二次确认且强调不可恢复', b.confirms.some((c) => /不可恢复/.test(c.message) && c.danger === true), JSON.stringify(b.confirms));
+
+  b.confirmQueue.push(true);
+  h1.querySelector('.panel-actions button.btn-danger').click();
+  await until(async () => (await getLog()).some((x) => x.url === '/api/trash/empty'));
+  l = await getLog();
+  check('trash 清空: POST /api/trash/empty', nOf(l, 'POST', '/api/trash/empty') === 1, urls(l).join(' | '));
+  check('trash 清空: 确认文案含将删除的数量', /1 个目录/.test(b.confirms[b.confirms.length - 1].message), b.confirms[b.confirms.length - 1].message);
+  await until(() => h1.querySelector('.empty'));
+  check('trash 清空: 显示空状态', !!h1.querySelector('.empty'), h1.textContent.trim().slice(0, 60));
+  check('trash 清空: 空状态禁用清空按钮', h1.querySelector('.panel-actions button.btn-danger').disabled === true);
+  trace('trash 列表/恢复/彻底删除/清空 实际请求（含方法）', await getLog());
+
+  unmountView(trashView, b);
+
+  await fetch('/__scenario', { method: 'POST', body: JSON.stringify({ trashNotes: [{ id: 11, title: '重挂载', deletedAt: new Date().toISOString() }], trashFolders: [] }) });
+  const h2 = newHost();
+  const b2 = makeCtx('trash');
+  await resetLog();
+  await trashView.mount(h2, b2.ctx);
+  await until(() => h2.querySelectorAll('.trash-row').length === 1);
+  l = await getLog();
+  check('trash 重挂载: 只发 1 次 GET /api/trash（无重复请求）', nOf(l, 'GET', '/api/trash') === 1, urls(l).join(' | '));
+
+  const liveBtn = h2.querySelector('.trash-row button[data-act="purge"]');
+  unmountView(trashView, b2);
+  const before = (await getLog()).length;
+  b2.confirmQueue.push(true);
+  liveBtn.click();
+  await sleep(150);
+  l = await getLog();
+  check('trash 卸载后: 旧 DOM 点击不再发请求 / 不再弹确认', l.length === before && b2.confirms.length === 0, urls(l).slice(before).join(' | '));
+}
+
+/* ================================================================ io */
+async function phaseIo() {
+  const h = newHost();
+  const b = makeCtx('io');
+  await resetLog();
+  await ioView.mount(h, b.ctx);
+  await until(() => h.querySelectorAll('select[data-role="note-select"] option').length > 1);
+  let l = await getLog();
+  check('io 挂载: 拉取笔记列表用于单篇导出', nOf(l, 'GET', '/api/notes') === 1, urls(l).join(' | '));
+  check('io: 导出全部按钮存在', !!h.querySelector('button[data-act="export-all"]'));
+
+  const dt = new DataTransfer();
+  dt.items.add(new File(['---\ntitle: 导入甲\ntags: [a, <img src=x onerror=alert(1)>]\nfolder: 技术\n---\n正文'], 'a.md', { type: 'text/markdown' }));
+  dt.items.add(new File(['# 导入乙\n正文'], '<img src=x onerror=alert(1)>.md', { type: 'text/markdown' }));
+  dt.items.add(new File(['\u0000\u0001'], 'broken.md', { type: 'text/markdown' }));
+  h.querySelector('.dropzone').dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+  await until(() => h.querySelectorAll('.file-row').length === 3);
+  check('io 拖拽: 显示已选文件列表', h.querySelectorAll('.file-row').length === 3);
+  check('io 拖拽: 显示总大小', /已选 3 个文件，共 .*B/.test(h.querySelector('.io-summary').textContent), h.querySelector('.io-summary').textContent);
+  check('io 拖拽: 文件名 XSS 按文本渲染', h.querySelectorAll('.file-row img').length === 0 && !window.__xss);
+
+  h.querySelector('button[data-act="preview"]').click();
+  await until(() => document.querySelector('#modal-root .preview-item'));
+  l = await getLog();
+  const pv = l.find((x) => x.url === '/api/import/preview');
+  check('io 预览: POST /api/import/preview（multipart）', !!pv && pv.method === 'POST' && pv.multipart === true, JSON.stringify(pv));
+  check('io 预览: 携带 3 个文件', !!pv && pv.files.length === 3 && pv.files[0] === 'a.md', pv ? JSON.stringify(pv.files) : '');
+  check('io 预览: 弹窗列出 items[]（2 条）', document.querySelectorAll('#modal-root .preview-item').length === 2);
+  const modalText = document.querySelector('#modal-root').textContent;
+  check('io 预览: 渲染 title', /导入甲/.test(modalText) && /导入乙/.test(modalText));
+  check('io 预览: 渲染 sourceFile', /a\.md/.test(modalText) && /<img src=x onerror=alert\(1\)>\.md/.test(modalText), modalText.slice(0, 120));
+  check('io 预览: 渲染 folder（含未分类回退）', /目录：技术/.test(modalText) && /目录：未分类/.test(modalText), modalText.slice(0, 160));
+  check('io 预览: 渲染 sizeBytes（formatBytes）', /\d+(\.\d+)? (B|KB|MB)/.test(modalText), modalText.slice(0, 160));
+  check('io 预览: 渲染 tags', document.querySelectorAll('#modal-root .preview-tags .chip').length === 2);
+  check('io 预览: total 与 errors 一并展示', /共 2 篇待导入（来自 3 个文件），其中 1 个文件解析失败/.test(modalText) && /broken\.md: 编码无法识别/.test(modalText), modalText.slice(0, 200));
+  check('io 预览: 标签 XSS 按文本渲染', document.querySelectorAll('#modal-root img').length === 0 && !window.__xss, 'imgs=' + document.querySelectorAll('#modal-root img').length);
+  TRACE.push('preview 确认框文本: ' + document.querySelector('#modal-root .preview-summary').textContent);
+  TRACE.push('preview 条目渲染文本: ' + [...document.querySelectorAll('#modal-root .preview-item')].map((e) => e.textContent).join(' || '));
+
+  document.querySelector('#modal-root .modal-foot .btn-primary').click();
+  await until(async () => (await getLog()).some((x) => x.url === '/api/import/markdown'));
+  l = await getLog();
+  const im = l.find((x) => x.url === '/api/import/markdown');
+  check('io 导入: POST /api/import/markdown（multipart）', !!im && im.method === 'POST' && im.multipart === true, JSON.stringify(im));
+  await until(() => /导入 2/.test(h.querySelector('.import-result') ? h.querySelector('.import-result').textContent : ''));
+  check('io 结果: 渲染 imported/skipped/errors', /导入 2/.test(h.textContent) && /跳过 1/.test(h.textContent) && /出错 1/.test(h.textContent), h.querySelector('.import-result').textContent.trim().slice(0, 90));
+  check('io 结果: 逐条列出错误', /broken\.md: 编码无法识别/.test(h.querySelector('.import-error-list').textContent));
+  check('io 导入: 调用了 ctx.refreshTree()', b.calls.refreshTree === 1);
+  check('io 导入: 成功后清空已选文件', h.querySelectorAll('.file-row').length === 0);
+  trace('io 挂载/预览/导入 实际请求', await getLog());
+
+  /* total===0 && errors.length>0：只展示错误，不弹确认框 */
+  await fetch('/__scenario', { method: 'POST', body: JSON.stringify({ previewMode: 'errorsOnly' }) });
+  const dt2 = new DataTransfer();
+  dt2.items.add(new File(['x'], 'broken2.md', { type: 'text/markdown' }));
+  h.querySelector('.dropzone').dispatchEvent(new DragEvent('drop', { dataTransfer: dt2, bubbles: true, cancelable: true }));
+  await until(() => h.querySelectorAll('.file-row').length === 1);
+  h.querySelector('button[data-act="preview"]').click();
+  await until(() => /没有可导入的条目/.test(h.querySelector('.import-result').textContent));
+  check('io 预览(0 条): 不弹确认框', document.querySelectorAll('#modal-root .modal').length === 0);
+  check('io 预览(0 条): 只展示 errors、不显示空列表', h.querySelectorAll('.preview-list').length === 0 && /broken2\.md: 编码无法识别/.test(h.querySelector('.import-error-list').textContent), h.querySelector('.import-result').textContent.trim().slice(0, 100));
+
+  /* 契约每个字段各注入一次 XSS 载荷：title / sourceFile / folder / tags */
+  const PAYLOAD = '<img src=x onerror=alert(1)>';
+  await fetch('/__scenario', { method: 'POST', body: JSON.stringify({ previewMode: 'xss' }) });
+  const dt3 = new DataTransfer();
+  dt3.items.add(new File(['x'], 'xss.md', { type: 'text/markdown' }));
+  h.querySelector('.dropzone').dispatchEvent(new DragEvent('drop', { dataTransfer: dt3, bubbles: true, cancelable: true }));
+  await until(() => h.querySelectorAll('.file-row').length === 1);
+  h.querySelector('button[data-act="preview"]').click();
+  await until(() => document.querySelector('#modal-root .preview-item'));
+  const xssModal = document.querySelector('#modal-root');
+  const metaSpans = xssModal.querySelectorAll('.preview-meta > span');
+  check('XSS preview.title 按文本渲染', xssModal.querySelector('.preview-title').textContent === PAYLOAD, xssModal.querySelector('.preview-title').textContent);
+  check('XSS preview.sourceFile 按文本渲染', metaSpans[0].textContent === PAYLOAD + '.md', metaSpans[0].textContent);
+  check('XSS preview.folder 按文本渲染', metaSpans[1].textContent === '目录：' + PAYLOAD, metaSpans[1].textContent);
+  check('XSS preview.tags 按文本渲染', metaSpans[3].querySelectorAll('.chip').length === 2 && metaSpans[3].querySelector('.chip').textContent === PAYLOAD, metaSpans[3].textContent);
+  check('XSS preview.sizeBytes 仍正常渲染', /\d+(\.\d+)? (B|KB|MB)/.test(metaSpans[2].textContent), metaSpans[2].textContent);
+  check('XSS preview: 弹窗内无 img 元素且 alert 未触发', xssModal.querySelectorAll('img').length === 0 && !window.__xss, 'imgs=' + xssModal.querySelectorAll('img').length);
+  TRACE.push('XSS preview 各字段渲染文本: ' + [...metaSpans].map((s) => s.textContent).join(' / '));
+  const importsBefore = (await getLog()).filter((x) => x.url === '/api/import/markdown').length;
+  xssModal.querySelector('.modal-foot .btn:not(.btn-primary)').click();
+  await sleep(80);
+  const importsAfter = (await getLog()).filter((x) => x.url === '/api/import/markdown').length;
+  check('XSS preview: 点取消后不发起导入', importsAfter === importsBefore, importsBefore + ' -> ' + importsAfter);
+  trace('io 预览(0 条) 实际请求', await getLog());
+
+  const clicks = [];
+  const origClick = HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click = function () { clicks.push(this.getAttribute('href')); };
+  h.querySelector('button[data-act="export-all"]').click();
+  const sel = h.querySelector('select[data-role="note-select"]');
+  sel.value = '12';
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+  const oneBefore = h.querySelector('button[data-act="export-one"]').disabled;
+  h.querySelector('button[data-act="export-one"]').click();
+  HTMLAnchorElement.prototype.click = origClick;
+
+  check('io 导出: 单篇导出按钮在选中后可用', oneBefore === false);
+  check('io 导出: 导出全部指向 /api/export/all', clicks.includes('/api/export/all'), clicks.join(' | '));
+  check('io 导出: 单篇导出指向 /api/export/notes/12.md', clicks.includes('/api/export/notes/12.md'), clicks.join(' | '));
+  TRACE.push('io 导出实际下载 URL: ' + clicks.join(' | '));
+
+  unmountView(ioView, b);
+  const h2 = newHost();
+  const b2 = makeCtx('io');
+  await resetLog();
+  await ioView.mount(h2, b2.ctx);
+  await until(() => h2.querySelectorAll('select[data-role="note-select"] option').length > 1);
+  l = await getLog();
+  check('io 重挂载: GET /api/notes 只发 1 次', nOf(l, 'GET', '/api/notes') === 1, urls(l).join(' | '));
+
+  const staleExport = h2.querySelector('button[data-act="export-all"]');
+  unmountView(ioView, b2);
+  const clicks2 = [];
+  const orig2 = HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click = function () { clicks2.push(this.getAttribute('href')); };
+  staleExport.click();
+  await sleep(120);
+  HTMLAnchorElement.prototype.click = orig2;
+  check('io 卸载后: 旧 DOM 点击不再触发下载', clicks2.length === 0, clicks2.join(' | '));
+}
+
+/* ================================================================ stats */
+async function phaseStats() {
+  const h = newHost();
+  const b = makeCtx('stats');
+  await resetLog();
+  await statsView.mount(h, b.ctx);
+  await until(() => h.querySelectorAll('.chart-bar').length === 14);
+
+  const l = await getLog();
+  check('stats 挂载: GET /api/stats 1 次', nOf(l, 'GET', '/api/stats') === 1, urls(l).join(' | '));
+  check('stats 挂载: GET /api/recent?limit=5', l.some((x) => x.url.startsWith('/api/recent') && /limit=5/.test(x.url)), urls(l).join(' | '));
+  check('stats: 14 根柱子全部渲染', h.querySelectorAll('.chart-col').length === 14 && h.querySelectorAll('.chart-bar').length === 14);
+  const cols = [...h.querySelectorAll('.chart-col')];
+  const zeros = cols.filter((c) => c.dataset.count === '0');
+  check('stats: 值为 0 的日期也在（6 天）', zeros.length === 6, 'zeros=' + zeros.length);
+  check('stats: 0 值柱仍有可见高度', zeros.every((c) => c.querySelector('.chart-bar').style.height === '2%'), zeros.map((c) => c.querySelector('.chart-bar').style.height).join(','));
+  const peak = cols.find((c) => c.dataset.count === '7');
+  check('stats: 柱高按最大值归一化（峰值 100%）', !!peak && peak.querySelector('.chart-bar').style.height === '100%', peak ? peak.querySelector('.chart-bar').style.height : 'missing');
+  const half = cols.find((c) => c.dataset.count === '3');
+  check('stats: 非峰值按比例缩放', !!half && half.querySelector('.chart-bar').style.height === '42.9%', half ? half.querySelector('.chart-bar').style.height : 'missing');
+  check('stats: 每根柱子有日期与数量的悬停提示', h.querySelectorAll('.chart-tip').length === 14 && /\d\d-\d\d · \d+ 篇/.test(h.querySelector('.chart-tip').textContent), h.querySelector('.chart-tip').textContent);
+  check('stats: 数字千分位', /4,242/.test(h.textContent), (h.querySelector('.stat-value') || {}).textContent);
+  check('stats: 附件占用用 formatBytes 展示', /5\.0 MB/.test(h.textContent));
+  check('stats: 最近更新区块渲染', h.querySelectorAll('.recent-item').length === 2);
+  check('stats: 最近更新标题 XSS 按文本渲染', h.querySelectorAll('.recent-item img').length === 0 && !window.__xss);
+  check('stats: 回收站卡片可跳转', h.querySelector('.stat-card[data-to="trash"]') !== null);
+
+  const card = h.querySelector('.stat-card[data-to="trash"]');
+  if (card) card.click();
+  check('stats: 点击回收站卡片调用 navigate', b.calls.navigated.includes('trash'), b.calls.navigated.join(','));
+  const recentBtn = h.querySelector('.recent-item');
+  if (recentBtn) recentBtn.click();
+  check('stats: 点击最近更新调用 openNote', b.calls.opened.length === 1, b.calls.opened.join(','));
+
+  unmountView(statsView, b);
+  const h2 = newHost();
+  const b2 = makeCtx('stats');
+  await resetLog();
+  await statsView.mount(h2, b2.ctx);
+  await until(() => h2.querySelectorAll('.chart-bar').length === 14);
+  const l2 = await getLog();
+  check('stats 重挂载: stats/recent 各只发 1 次', nOf(l2, 'GET', '/api/stats') === 1 && l2.filter((x) => x.url.startsWith('/api/recent')).length === 1, urls(l2).join(' | '));
+  unmountView(statsView, b2);
+}
+
+/* ================================================================ admin */
+async function phaseAdminForbidden() {
+  const h = newHost();
+  const b = makeCtx('admin', { isAdmin: false, user: { id: 9, username: 'bob', displayName: '鲍勃', role: 'member' } });
+  await resetLog();
+  await adminView.mount(h, b.ctx);
+  await sleep(200);
+  const l = await getLog();
+  check('admin(非管理员): 不发任何请求', l.length === 0, urls(l).join(' | '));
+  check('admin(非管理员): 显示无权访问', /无权访问/.test(h.textContent), h.textContent.trim().slice(0, 40));
+  check('admin(非管理员): 不渲染用户表', h.querySelectorAll('.admin-table').length === 0);
+  check('admin(非管理员): 隐藏头部操作', h.querySelector('.panel-actions').hidden === true);
+  trace('admin(非管理员) 实际请求（应为空）', await getLog());
+  unmountView(adminView, b);
+}
+
+async function phaseAdmin() {
+  const h = newHost();
+  const b = makeCtx('admin', { isAdmin: true, user: { id: 1, username: 'alice', displayName: '爱丽丝', role: 'admin' } });
+  await resetLog();
+  await adminView.mount(h, b.ctx);
+  await until(() => h.querySelectorAll('.admin-table').length === 2);
+
+  let l = await getLog();
+  check('admin 挂载: GET users + invites 各 1 次', nOf(l, 'GET', '/api/admin/users') === 1 && nOf(l, 'GET', '/api/admin/invites') === 1, urls(l).join(' | '));
+  let tables = h.querySelectorAll('.admin-table');
+  check('admin: 用户表 3 行（用户名/显示名/角色/状态/创建时间）', tables[0].querySelectorAll('tbody tr').length === 3 && tables[0].querySelectorAll('thead th').length === 6);
+  check('admin: 用户表含角色徽标与状态', /管理员/.test(tables[0].textContent) && /已停用/.test(tables[0].textContent));
+  check('admin: 用户名 XSS 按文本渲染', tables[0].querySelectorAll('img').length === 0 && !window.__xss);
+
+  let selfRow = h.querySelector('tr[data-id="1"]');
+  check('admin: 自己那行标记「本人」', /本人/.test(selfRow.textContent));
+  check('admin: 不能停用自己（禁用 + tooltip）', selfRow.querySelector('button[data-act="toggle-user"]').disabled === true && /不能停用自己/.test(selfRow.querySelector('button[data-act="toggle-user"]').title));
+  check('admin: 不能删除自己（禁用 + tooltip）', selfRow.querySelector('button[data-act="delete-user"]').disabled === true && /不能删除自己/.test(selfRow.querySelector('button[data-act="delete-user"]').title));
+  check('admin: 最后一名管理员同样不可停用', selfRow.querySelector('button[data-act="toggle-user"]').dataset.disabledReason.length > 0, selfRow.querySelector('button[data-act="toggle-user"]').dataset.disabledReason);
+  const otherRow = h.querySelector('tr[data-id="2"]');
+  check('admin: 他人行的停用可用', otherRow.querySelector('button[data-act="toggle-user"]').disabled === false);
+  check('admin: 他人行的删除可用', otherRow.querySelector('button[data-act="delete-user"]').disabled === false);
+
+  const beforeClick = (await getLog()).length;
+  selfRow.querySelector('button[data-act="toggle-user"]').click();
+  await sleep(120);
+  check('admin: 点击自己行的禁用按钮不发请求', (await getLog()).length === beforeClick);
+
+  tables = h.querySelectorAll('.admin-table');
+  const inviteRows = tables[1].querySelectorAll('tbody tr');
+  check('admin: 邀请码 3 条（含已用/过期/可用）', inviteRows.length === 3);
+  check('admin: 已使用邀请码不可吊销', inviteRows[0].querySelector('button[data-act="revoke-invite"]').disabled === true && /不能吊销/.test(inviteRows[0].querySelector('button[data-act="revoke-invite"]').title));
+  check('admin: 已过期邀请码标记过期', /已过期/.test(inviteRows[1].textContent));
+  check('admin: 未使用邀请码可吊销', inviteRows[2].querySelector('button[data-act="revoke-invite"]').disabled === false);
+  inviteRows[0].querySelector('button[data-act="copy-invite"]').click();
+  await sleep(80);
+  check('admin: 邀请码一键复制调用 copyText', b.copied.includes('INV-USED-0001'), b.copied.join(','));
+
+  /* 创建用户 */
+  b.formQueue.push({ username: 'newbie', displayName: '新同学', password: 'password123', role: 'admin' });
+  h.querySelector('button[data-act="create-user"]').click();
+  await until(async () => (await getLog()).some((x) => x.method === 'POST' && x.url === '/api/admin/users'));
+  l = await getLog();
+  const post = l.find((x) => x.method === 'POST' && x.url === '/api/admin/users');
+  check('admin 创建用户: POST /api/admin/users', !!post, JSON.stringify(post));
+  check('admin 创建用户: 请求体含 username/displayName/password/role', !!post && JSON.parse(post.body).username === 'newbie' && JSON.parse(post.body).role === 'admin' && JSON.parse(post.body).password === 'password123', post ? post.body : '');
+  await until(() => h.querySelectorAll('.admin-table')[0].querySelectorAll('tbody tr').length === 4);
+  check('admin 创建用户: 新用户出现在列表', /newbie/.test(h.querySelectorAll('.admin-table')[0].textContent));
+  check('admin 创建用户: 表单标题为「创建用户」', b.forms[b.forms.length - 1].title === '创建用户', b.forms[b.forms.length - 1].title);
+
+  /* 409 → 字段级错误 */
+  b.formQueue.push({ username: 'alice', displayName: '重复名', password: 'password123', role: 'member' });
+  b.formQueue.push(null);
+  const formsBefore = b.forms.length;
+  h.querySelector('button[data-act="create-user"]').click();
+  await until(() => b.forms.length === formsBefore + 2);
+  const second = b.forms[formsBefore + 1];
+  check('admin 409: 重新弹出表单而不是只弹通用错误', b.forms.length === formsBefore + 2);
+  check('admin 409: 表单内联字段级错误', !!second.extra && /用户名/.test(second.extra.textContent) && /已存在/.test(second.extra.textContent), second.extra ? second.extra.textContent : 'no-extra');
+  check('admin 409: 保留已填内容', second.fields.find((f) => f.name === 'username').value === 'alice', JSON.stringify(second.fields.map((f) => [f.name, f.value])));
+  check('admin 409: 聚焦出错字段', second.fields.find((f) => f.name === 'username').autofocus === true);
+
+  /* 编辑自己：不允许改角色/停用 */
+  b.formQueue.push(null);
+  const formsBefore2 = b.forms.length;
+  h.querySelector('tr[data-id="1"] button[data-act="edit-user"]').click();
+  await until(() => b.forms.length === formsBefore2 + 1);
+  const editSelf = b.forms[formsBefore2];
+  check('admin 编辑自己: 不提供角色/状态字段', !editSelf.fields.some((f) => f.name === 'role') && !editSelf.fields.some((f) => f.name === 'disabled'), JSON.stringify(editSelf.fields.map((f) => f.name)));
+  check('admin 编辑自己: 给出不能降级/停用的说明', !!editSelf.extra && /不能修改自己的角色/.test(editSelf.extra.textContent), editSelf.extra ? editSelf.extra.textContent : 'no-extra');
+
+  /* 编辑他人：PATCH 正确 */
+  b.formQueue.push({ displayName: '鲍勃改名', password: '', role: 'member', disabled: 'true' });
+  h.querySelector('tr[data-id="2"] button[data-act="edit-user"]').click();
+  await until(async () => (await getLog()).some((x) => x.method === 'PATCH'));
+  l = await getLog();
+  const patch = l.find((x) => x.method === 'PATCH' && x.url === '/api/admin/users/2');
+  check('admin 编辑他人: PATCH /api/admin/users/2', !!patch, urls(l).join(' | '));
+  check('admin 编辑他人: 空密码不下发、disabled 正确', !!patch && !('password' in JSON.parse(patch.body)) && JSON.parse(patch.body).disabled === true, patch ? patch.body : '');
+
+  /* 删除他人 */
+  b.confirmQueue.push(true);
+  h.querySelector('tr[data-id="3"] button[data-act="delete-user"]').click();
+  await until(async () => (await getLog()).some((x) => x.method === 'DELETE'));
+  l = await getLog();
+  check('admin 删除用户: DELETE /api/admin/users/3', nOf(l, 'DELETE', '/api/admin/users/3') === 1, urls(l).join(' | '));
+  check('admin 删除用户: 二次确认强调连带删除全部笔记且不可恢复', b.confirms.some((c) => /连带删除/.test(c.message) && /不可恢复/.test(c.message) && c.danger === true), JSON.stringify(b.confirms[b.confirms.length - 1]));
+
+  /* 生成邀请码 */
+  b.formQueue.push({ expiresInHours: '24' });
+  h.querySelector('button[data-act="create-invite"]').click();
+  await until(async () => (await getLog()).some((x) => x.method === 'POST' && x.url === '/api/admin/invites'));
+  l = await getLog();
+  const invitePost = l.find((x) => x.method === 'POST' && x.url === '/api/admin/invites');
+  check('admin 生成邀请码: POST /api/admin/invites 带 expiresInHours', !!invitePost && JSON.parse(invitePost.body).expiresInHours === 24, invitePost ? invitePost.body : '');
+  await until(() => /INV-NEW-/.test(h.textContent));
+  check('admin 生成邀请码: 新邀请码出现在列表', /INV-NEW-/.test(h.querySelectorAll('.admin-table')[1].textContent));
+
+  /* 吊销邀请码 */
+  b.confirmQueue.push(true);
+  const openRow = [...h.querySelectorAll('.admin-table')[1].querySelectorAll('tbody tr')].find((r) => r.querySelector('button[data-act="revoke-invite"]') && !r.querySelector('button[data-act="revoke-invite"]').disabled);
+  check('admin: 找到可吊销的邀请码行', !!openRow);
+  if (openRow) {
+    openRow.querySelector('button[data-act="revoke-invite"]').click();
+    await until(async () => (await getLog()).some((x) => x.method === 'DELETE' && x.url.startsWith('/api/admin/invites/')));
+    l = await getLog();
+    const del = l.find((x) => x.method === 'DELETE' && x.url.startsWith('/api/admin/invites/'));
+    check('admin 吊销邀请码: DELETE /api/admin/invites/{code}（仅未使用）', !!del && !del.url.includes('INV-USED'), del ? del.url : urls(l).join(' | '));
+  }
+
+  trace('admin 用户/邀请码 实际请求', await getLog());
+  unmountView(adminView, b);
+  const h2 = newHost();
+  const b2 = makeCtx('admin', { isAdmin: true, user: { id: 1, username: 'alice', displayName: '爱丽丝', role: 'admin' } });
+  await resetLog();
+  await adminView.mount(h2, b2.ctx);
+  await until(() => h2.querySelectorAll('.admin-table').length === 2);
+  const l2 = await getLog();
+  check('admin 重挂载: users/invites 各只发 1 次', nOf(l2, 'GET', '/api/admin/users') === 1 && nOf(l2, 'GET', '/api/admin/invites') === 1, urls(l2).join(' | '));
+  unmountView(adminView, b2);
+}
+
+/* ================================================================ run */
+const phases = [phaseTrash, phaseIo, phaseStats, phaseAdminForbidden, phaseAdmin];
+for (const p of phases) {
+  try { await p(); }
+  catch (e) { check('phase ' + p.name + ' 执行异常', false, (e && e.stack) || String(e)); }
+}
+check('全局：无 console 错误 / 未捕获异常', window.__errs.length === 0, window.__errs.join(' || '));
+check('全局：无 XSS 执行（alert 未被调用）', window.__xss === false);
+if (new URLSearchParams(location.search).get('neg')) check('NEGATIVE CONTROL（仅 ?neg=1 注入，用于验证失败可被上报）', false, 'intentional-failure');
+
+const passed = T.filter((t) => t.ok).length;
+const out = { passed, total: T.length, failed: T.filter((t) => !t.ok), trace: TRACE, tests: T };
+await fetch('/__report', { method: 'POST', body: JSON.stringify(out) });
+document.getElementById('report').textContent = `passed ${passed}/${T.length}`;
+document.title = `kb-drive ${passed}/${T.length}`;
+</script>
+</body>
+</html>

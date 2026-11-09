@@ -1,0 +1,7 @@
+/* 样式入口：按层叠顺序引入（token → 基础 → 组件 → 外壳 → 视图） */
+@import './styles/tokens.css';
+@import './styles/base.css';
+@import './styles/components.css';
+@import './styles/shell.css';
+@import './styles/views-core.css';
+@import './styles/views-admin.css';

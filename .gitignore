@@ -1,0 +1,42 @@
+# 运行时数据与本地工具（不入库）
+data/
+backups/
+tools/*.exe
+scripts/.runtime/
+
+# 本地私有配置（含 API key，绝不入库）
+.kb-local.env
+
+# 数据恢复归档（取证用，代码不引用）
+_recovery-archive/
+
+# JVM 崩溃日志
+hs_err_pid*.log
+replay_pid*.log
+
+# Java 构建产物
+backend/target/
+
+# Python 验收工具的编译缓存
+__pycache__/
+*.pyc
+
+# ---- 2026-11-09 基线补充（审计实测：体积大且可再生产）----
+# 验收工具的浏览器 profile / 截图缓存：约 124 MB、2000+ 文件
+tools/verify/frontend-core/edge-profile-lab/
+tools/verify/frontend-core/edge-profile-tag/
+tools/verify/**/*-shots/
+
+# 一次性验收证据归档：约 28 MB / 1001 文件（报告类 .md 仍入库）
+docs/test-*/evidence/
+
+# 依赖目录（任意层级，tools/verify 下也有）与 Vite 缓存
+node_modules/
+frontend/dist/
+frontend/.vite/
+.pnpm-store/
+
+# 构建中间件与临时文件
+*.original
+*.tmp
+*.bak

@@ -1,0 +1,355 @@
+/* ==========================================================================
+   M1 文章大纲 / M2 阅读进度条 / M3 相关推荐
+   全部是「只读叠加层」：不改变正文宽度、不往编辑器里注入任何东西
+   ========================================================================== */
+
+/* 让面板能相对编辑器面板定位（.kb-editor-pane 本身是 flex 列） */
+.kb-editor-pane {
+  position: relative;
+}
+
+/* ---- M1 大纲 ---- */
+.kb-outline {
+  position: fixed;
+  top: calc(var(--topbar-h, 56px) + var(--sp-4));
+  right: 8px;
+  width: 200px;
+  max-height: calc(100vh - var(--topbar-h, 56px) - var(--sp-7));
+  overflow-y: auto;
+  padding: var(--sp-2) 0;
+  border-left: 1px solid var(--border);
+  font-size: 12px;
+  line-height: 1.5;
+  z-index: 20;
+}
+
+.kb-outline__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-2) var(--sp-2);
+  font-weight: 650;
+  color: var(--text-secondary);
+}
+
+.kb-outline__collapse,
+.kb-outline__close {
+  border: 0;
+  background: none;
+  padding: 2px 4px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--r-sm);
+}
+
+.kb-outline__collapse:hover,
+.kb-outline__close:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.kb-outline__list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 var(--sp-2);
+}
+
+.kb-outline__item {
+  display: block;
+  width: 100%;
+  padding: 3px 6px;
+  border: 0;
+  border-left: 2px solid transparent;
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-outline__item:hover {
+  color: var(--text);
+  background: var(--bg-muted);
+}
+
+.kb-outline__item.is-active {
+  color: var(--accent);
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+
+.kb-outline__item--l2 {
+  padding-left: 14px;
+}
+
+.kb-outline__item--l3 {
+  padding-left: 24px;
+  font-size: 11.5px;
+}
+
+.kb-outline__more {
+  padding: 4px 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.kb-outline__collapsed,
+.kb-outline__toggle {
+  position: fixed;
+  right: var(--sp-4);
+  top: calc(var(--topbar-h, 56px) + var(--sp-2));
+  z-index: 21;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+}
+
+.kb-outline__collapsed:hover,
+.kb-outline__toggle:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* 手机：顶部「目录」按钮 + 底部抽屉 */
+.kb-outline--mobile .kb-outline__toggle {
+  position: static;
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  margin-bottom: var(--sp-2);
+}
+
+.kb-outline__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgb(0 0 0 / 32%);
+}
+
+.kb-outline__sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 61;
+  max-height: 62vh;
+  overflow-y: auto;
+  padding: var(--sp-3) var(--sp-4) var(--sp-5);
+  border-radius: var(--r-md) var(--r-md) 0 0;
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+
+.kb-outline__sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: var(--sp-2);
+  font-weight: 650;
+}
+
+/* ---- M2 阅读进度条 ---- */
+.kb-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  z-index: 30;
+  pointer-events: none;
+}
+
+.kb-progress__bar {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+.kb-progress__bar.is-visible {
+  opacity: 1;
+}
+
+/* ---- M3 相关推荐 ---- */
+.kb-related {
+  flex: none;
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--border);
+}
+
+.kb-related__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+
+.kb-related__title {
+  font-size: var(--fs-sm);
+  font-weight: 650;
+}
+
+.kb-related__count {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.kb-related__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kb-related__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  width: 100%;
+  min-height: 34px;
+  padding: 6px var(--sp-2);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.kb-related__row:hover {
+  background: var(--bg-muted);
+}
+
+.kb-related__row:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
+.kb-related__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-related__reason {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: var(--r-full);
+  background: var(--bg-muted);
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.kb-related__skeleton {
+  padding: 8px var(--sp-2);
+}
+
+/* 窄屏：大纲不出现在右侧（改为顶部按钮 + 底部抽屉） */
+@media (max-width: 1279px) {
+  .kb-outline:not(.kb-outline--mobile) {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kb-progress__bar {
+    transition: none;
+  }
+}
+
+@media (pointer: coarse) {
+  .kb-related__row {
+    min-height: 44px;
+  }
+}
+/* 平板：右侧抽屉 */
+.kb-outline--drawer {
+  position: static;
+  width: auto;
+  max-height: none;
+  border-left: 0;
+  overflow: visible;
+}
+
+.kb-outline__side {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 61;
+  width: min(280px, 78vw);
+  overflow-y: auto;
+  padding: var(--sp-4);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+
+@media (max-width: 1023px) {
+  .kb-outline--drawer {
+    display: none;
+  }
+}
+/* ---------------------------------------------------------------------------
+ * 移动端点击区（≥44×44）
+ *
+ * 依据：方案《页面优化方案.md》里的硬规则 —— 手机上任何可点元素命中区不小于 44×44px。
+ * 回归实测发现三类元素在手机断点下偏小：顶部「目录」按钮（34px 高）、
+ * 目录树行（40px 高）、笔记列表项。这里统一兜底到 44px。
+ * 只影响 ≤1023px（平板与手机），桌面布局不变。
+ * ------------------------------------------------------------------------- */
+@media (max-width: 1023px) {
+  .kb-outline--mobile .kb-outline__toggle {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 10px 14px;
+    align-items: center;
+  }
+
+  /* 权重必须高于 shell.css 里的 .kb-tree-row__main{min-height:40px}，
+     否则同权重下被后加载的规则覆盖（实测 2026-11-01） */
+  .kb-tree-row .kb-tree-row__main,
+  .kb-note-item .kb-note-item__main {
+    min-height: 44px;
+  }
+
+  .kb-tree-row__twist,
+  .kb-tree-row__action {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* 图标按钮：顶栏菜单、笔记项「更多」等，默认 40×40 也偏小 */
+  .kb-btn--icon,
+  .kb-note-item__more {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+

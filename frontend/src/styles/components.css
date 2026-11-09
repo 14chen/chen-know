@@ -1,0 +1,407 @@
+/* ==========================================================================
+   基础组件样式：按钮 / 输入框 / 下拉 / 弹窗 / toast / 骨架屏 / 空状态 / 徽标
+   这些类对所有实现者开放（p-editor 亦可复用）。
+   ========================================================================== */
+
+/* ---- 按钮 -------------------------------------------------------------- */
+.kb-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  height: 36px;
+  padding: 0 var(--sp-4);
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--fs-base);
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background-color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+}
+
+.kb-btn:active:not(:disabled) {
+  transform: translateY(1px) scale(0.99);
+}
+
+.kb-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.kb-btn--primary {
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: var(--shadow-sm);
+}
+
+.kb-btn--primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.kb-btn--secondary {
+  background: var(--surface-raised);
+  border-color: var(--border);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+.kb-btn--secondary:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--bg-subtle);
+}
+
+.kb-btn--danger {
+  background: var(--danger);
+  color: #fff;
+}
+
+.kb-btn--danger:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.kb-btn--ghost {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.kb-btn--ghost:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+
+/* 图标按钮：正方形，常用于工具栏 */
+.kb-btn--icon {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.kb-btn--icon:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+
+.kb-btn--sm {
+  height: 30px;
+  padding: 0 var(--sp-3);
+  font-size: var(--fs-sm);
+}
+
+.kb-btn--block {
+  width: 100%;
+}
+
+/* ---- 输入框 ------------------------------------------------------------ */
+.kb-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.kb-field__label {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.kb-input {
+  width: 100%;
+  height: 40px;
+  padding: 0 var(--sp-3);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  color: var(--text);
+  transition: border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease);
+}
+
+.kb-input::placeholder {
+  color: var(--text-muted);
+}
+
+.kb-input:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+.kb-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+
+.kb-input:disabled {
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.kb-input--invalid {
+  border-color: var(--danger);
+}
+
+.kb-input--invalid:focus {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px var(--danger-soft);
+}
+
+.kb-field__hint {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+/* 带图标的输入框（密码可见性切换等） */
+.kb-input-affix {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.kb-input-affix .kb-input {
+  padding-right: 44px;
+}
+
+.kb-input-affix__action {
+  position: absolute;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-sm);
+  color: var(--text-muted);
+}
+
+.kb-input-affix__action:hover {
+  color: var(--text);
+  background: var(--bg-subtle);
+}
+
+/* ---- 下拉 -------------------------------------------------------------- */
+.kb-select {
+  width: 100%;
+  height: 36px;
+  padding: 0 34px 0 var(--sp-3);
+  background-color: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  color: var(--text);
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 17px) 15px, calc(100% - 12px) 15px;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+}
+
+.kb-select:hover {
+  border-color: var(--border-strong);
+}
+
+.kb-select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+
+/* ---- 弹窗 -------------------------------------------------------------- */
+.kb-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: grid;
+  place-items: center;
+  padding: var(--sp-5);
+  background: var(--scrim);
+  backdrop-filter: blur(3px);
+  animation: kb-fade-in var(--dur) var(--ease);
+}
+
+.kb-modal {
+  width: min(440px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-lg);
+  animation: kb-rise-in var(--dur-slow) var(--ease);
+  overflow: hidden;
+}
+
+.kb-modal__header {
+  padding: var(--sp-5) var(--sp-5) 0;
+}
+
+.kb-modal__title {
+  font-size: var(--fs-lg);
+  font-weight: 650;
+  line-height: var(--lh-tight);
+}
+
+.kb-modal__body {
+  padding: var(--sp-3) var(--sp-5) 0;
+  color: var(--text-secondary);
+}
+
+.kb-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  padding: var(--sp-5);
+}
+
+/* ---- toast -------------------------------------------------------------
+   作用域限定在 .kb-toast-stack 内：p-editor 自带一套 .kb-toast-* 提示条，
+   不加限定会互相串样式（类名冲突已在集成时核对）。 */
+.kb-toast-stack {
+  position: fixed;
+  z-index: var(--z-toast);
+  right: var(--sp-5);
+  bottom: var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  max-width: min(380px, calc(100vw - var(--sp-6)));
+  pointer-events: none;
+}
+
+.kb-toast-stack .kb-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  animation: kb-rise-in var(--dur-slow) var(--ease);
+  pointer-events: auto;
+}
+
+.kb-toast-stack .kb-toast__icon {
+  flex: none;
+  margin-top: 2px;
+}
+
+.kb-toast-stack .kb-toast__text {
+  flex: 1;
+  font-size: var(--fs-sm);
+  color: var(--text);
+  word-break: break-word;
+}
+
+.kb-toast-stack .kb-toast__close {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.kb-toast-stack .kb-toast--success .kb-toast__icon {
+  color: var(--success);
+}
+
+.kb-toast-stack .kb-toast--error .kb-toast__icon {
+  color: var(--danger);
+}
+
+.kb-toast-stack .kb-toast--info .kb-toast__icon {
+  color: var(--accent);
+}
+
+.kb-toast-stack .kb-toast--warn .kb-toast__icon {
+  color: var(--warning);
+}
+
+/* ---- 骨架屏 ------------------------------------------------------------ */
+.kb-skeleton {
+  border-radius: var(--r-sm);
+  background: linear-gradient(
+    90deg,
+    var(--bg-muted) 25%,
+    var(--bg-subtle) 37%,
+    var(--bg-muted) 63%
+  );
+  background-size: 200% 100%;
+  animation: kb-shimmer 1400ms ease-in-out infinite;
+}
+
+/* ---- 空状态 ------------------------------------------------------------ */
+.kb-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-7) var(--sp-5);
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.kb-empty__icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--r-full);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+}
+
+.kb-empty__title {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.kb-empty__desc {
+  font-size: var(--fs-sm);
+  max-width: 34ch;
+}
+
+/* ---- 徽标 -------------------------------------------------------------- */
+.kb-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  height: 22px;
+  padding: 0 var(--sp-2);
+  border-radius: var(--r-full);
+  background: var(--bg-muted);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.kb-badge--accent {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.kb-badge--success {
+  background: color-mix(in srgb, var(--success) 14%, transparent);
+  color: var(--success);
+}
+
+.kb-badge--danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.kb-badge--warning {
+  background: color-mix(in srgb, var(--warning) 16%, transparent);
+  color: var(--warning);
+}
+
+.kb-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-full);
+  background: currentColor;
+}
