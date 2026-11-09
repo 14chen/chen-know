@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ReactNode, RefObject } from 'react'
+import type { CSSProperties, ReactNode, RefObject } from 'react'
 import { describeApiError, request } from '@/api/client'
 import { logout } from '@/api/auth'
 import { createNote, deleteNote, patchNote } from '@/api/notes'
@@ -8,7 +8,7 @@ import type { SelectedNoteMeta } from '@/shell/useNotes'
 import type { FolderNode, User } from '@/api/types'
 import { Button } from '@/components/Button'
 import { EmptyState } from '@/components/EmptyState'
-import { IconAlert, IconFileText, IconMoon, IconPanelLeft, IconSun, IconUsers } from '@/components/Icon'
+import { IconAlert, IconFileText, IconPanelLeft, IconUsers } from '@/components/Icon'
 import { Modal } from '@/components/Modal'
 import { Skeleton } from '@/components/Skeleton'
 import { useConfirm } from '@/shell/ConfirmProvider'
@@ -17,7 +17,10 @@ import { findView, findEntry } from '@/views/registry'
 import type { ViewContext } from '@/views/types'
 import { DigestPanel } from './DigestPanel'
 import { EditorSlotProvider } from './editorSlot'
+import { ReadBar } from './ReadBar'
+import { clampZoom, READ_ZOOM_DEFAULT } from './readZoom'
 import { Sidebar } from './Sidebar'
+import { ThemeMenu } from './ThemeMenu'
 import { Topbar } from './Topbar'
 import { formatBytes, formatDateTime, formatRelativeTime } from './time'
 import { useBreakpoint, isDrawerBreakpoint } from './useResponsive'
@@ -788,6 +791,8 @@ function NotePrevNext({
 
 const SIDEBAR_STORAGE_KEY = 'kb.sidebar'
 const EDITOR_WIDTH_KEY = 'kb.editorWidth'
+const READ_ZOOM_KEY = 'kb.read.zoom'
+const READ_MODE_KEY = 'kb.read.mode'
 
 function readCollapsedPreference(): boolean {
   try {
@@ -806,14 +811,38 @@ function readEditorWide(): boolean {
   }
 }
 
+/** 正文缩放偏好（百分比 80–200，默认 100） */
+function readReadZoom(): number {
+  try {
+    return clampZoom(Number(localStorage.getItem(READ_ZOOM_KEY) ?? READ_ZOOM_DEFAULT))
+  } catch {
+    return READ_ZOOM_DEFAULT
+  }
+}
+
+/** 阅读模式偏好：只读，避免翻资料时误改正文 */
+function readReadMode(): boolean {
+  try {
+    return localStorage.getItem(READ_MODE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+/** 缩放比例写成 CSS 变量（React 的 CSSProperties 不含自定义属性，只能断言） */
+function zoomStyle(percent: number): CSSProperties {
+  return { '--read-zoom': percent / 100 } as unknown as CSSProperties
+}
+
 export interface AppShellProps {
   user: User
   theme: Theme
-  onToggleTheme: () => void
+  /** 主题菜单：四套主题里直接选一套 */
+  onSelectTheme: (theme: Theme) => void
   onLoggedOut: () => void
 }
 
-export function AppShell({ user, theme, onToggleTheme, onLoggedOut }: AppShellProps) {
+export function AppShell({ user, theme, onSelectTheme, onLoggedOut }: AppShellProps) {
   const toast = useToast()
   const confirm = useConfirm()
   const notes = useNotes()
@@ -828,6 +857,8 @@ export function AppShell({ user, theme, onToggleTheme, onLoggedOut }: AppShellPr
   const [collapsed, setCollapsed] = useState(readCollapsedPreference)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [editorWide, setEditorWide] = useState(readEditorWide)
+  const [readZoom, setReadZoom] = useState(readReadZoom)
+  const [readMode, setReadMode] = useState(readReadMode)
   const [folderFilter, setFolderFilter] = useState<number | null>(null)
   const [creatingNote, setCreatingNote] = useState(false)
   const [confirmingLogout, setConfirmingLogout] = useState(false)
@@ -836,6 +867,23 @@ export function AppShell({ user, theme, onToggleTheme, onLoggedOut }: AppShellPr
   const [loggingOut, setLoggingOut] = useState(false)
   const lastOpenedRef = useRef<number | null>(null)
   const unknownRouteRef = useRef<string | null>(null)
+
+  // 阅读偏好落盘（缩放值与编辑/阅读模式都记住，下次打开还是原样）
+  useEffect(() => {
+    try {
+      localStorage.setItem(READ_ZOOM_KEY, String(readZoom))
+    } catch {
+      /* 隐私模式：忽略 */
+    }
+  }, [readZoom])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(READ_MODE_KEY, readMode ? '1' : '0')
+    } catch {
+      /* 隐私模式：忽略 */
+    }
+  }, [readMode])
 
   const { saveNow, select, changeContent, uploadImage } = notes
   const selectedId = notes.selectedId
@@ -1254,52 +1302,66 @@ export function AppShell({ user, theme, onToggleTheme, onLoggedOut }: AppShellPr
     )
   } else if (selectedId !== null) {
     editorArea = (
-      <div className="kb-editor-pane">
-        <ReadingProgress noteId={selectedId} />
-        <NoteHeaderLines
-          tree={tree.tree}
-          meta={notes.selectedMeta}
-          searchOrigin={searchOrigin}
-          onHome={() => {
-            setFolderFilter(null)
-            navigateWithFlush('notes', {})
-          }}
-          onFolder={(folderId) => {
-            setFolderFilter(folderId)
-            navigateWithFlush('notes', {})
-          }}
-          onBackToSearch={() => {
-            navigateWithFlush('search', searchOrigin ? searchOrigin.params : {})
-          }}
-        />
-        <DigestPanel noteId={selectedId} digest={notes.selectedDigest} />
-        <CodeBlockTools noteId={selectedId} content={notes.content} />
-        <Suspense fallback={<div className="kb-editor-placeholder" aria-busy="true" />}>
-          <MarkdownEditor
-            key={selectedId}
-            ref={editorRef}
-            value={notes.content}
-            onChange={changeContent}
-            noteTitle={notes.selectedTitle}
-            knownTitles={knownTitles}
-            onWikiLinkClick={handleWikiLinkClick}
-            onUploadImage={uploadImage}
-            onSave={saveNow}
+      <>
+        <div className="kb-editor-pane" style={zoomStyle(readZoom)}>
+          <ReadingProgress noteId={selectedId} />
+          {/* 缩放只作用于正文这层：工具条与右侧大纲保持原大小 */}
+          <div className="kb-read-surface">
+            <NoteHeaderLines
+              tree={tree.tree}
+              meta={notes.selectedMeta}
+              searchOrigin={searchOrigin}
+              onHome={() => {
+                setFolderFilter(null)
+                navigateWithFlush('notes', {})
+              }}
+              onFolder={(folderId) => {
+                setFolderFilter(folderId)
+                navigateWithFlush('notes', {})
+              }}
+              onBackToSearch={() => {
+                navigateWithFlush('search', searchOrigin ? searchOrigin.params : {})
+              }}
+            />
+            <DigestPanel noteId={selectedId} digest={notes.selectedDigest} />
+            <CodeBlockTools noteId={selectedId} content={notes.content} />
+            <Suspense fallback={<div className="kb-editor-placeholder" aria-busy="true" />}>
+              <MarkdownEditor
+                key={selectedId}
+                ref={editorRef}
+                value={notes.content}
+                onChange={changeContent}
+                noteTitle={notes.selectedTitle}
+                knownTitles={knownTitles}
+                onWikiLinkClick={handleWikiLinkClick}
+                onUploadImage={uploadImage}
+                onSave={saveNow}
+                readOnly={readMode}
+              />
+            </Suspense>
+          </div>
+          {/* 尾部导航与相关笔记不跟随缩放：否则放大后它们会挤占正文视口 */}
+          <NotePrevNext
+            items={visibleNotes}
+            currentId={selectedId}
+            onOpen={(id) => navigateWithFlush('notes', { id })}
           />
-        </Suspense>
-        <NotePrevNext
-          items={visibleNotes}
-          currentId={selectedId}
-          onOpen={(id) => navigateWithFlush('notes', { id })}
-        />
-        <RelatedNotes noteId={selectedId} onOpen={(id) => navigateWithFlush('notes', { id })} />
+          <RelatedNotes noteId={selectedId} onOpen={(id) => navigateWithFlush('notes', { id })} />
+          <ReadBar
+            zoom={readZoom}
+            onZoom={(next) => setReadZoom(clampZoom(next))}
+            readMode={readMode}
+            onReadMode={setReadMode}
+          />
+        </div>
+        {/* 大纲是 fixed 浮层，放在缩放层外面，缩放不会把它一起放大 */}
         <NoteOutline
-        content={notes.content}
-        noteId={selectedId}
-        noteTitle={notes.selectedTitle}
-        editorRef={editorRef}
-      />
-      </div>
+          content={notes.content}
+          noteId={selectedId}
+          noteTitle={notes.selectedTitle}
+          editorRef={editorRef}
+        />
+      </>
     )
   } else {
     editorArea = (
@@ -1337,14 +1399,7 @@ export function AppShell({ user, theme, onToggleTheme, onLoggedOut }: AppShellPr
             <IconPanelLeft size={18} />
           </Button>
           <span className="kb-rail__spacer" />
-          <Button
-            variant="icon"
-            onClick={onToggleTheme}
-            aria-label={theme === 'dark' ? '切换到浅色主题' : '切换到深色主题'}
-            title={theme === 'dark' ? '切换到浅色主题' : '切换到深色主题'}
-          >
-            {theme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
-          </Button>
+          <ThemeMenu theme={theme} onSelect={onSelectTheme} rail />
         </div>
       ) : null}
 
@@ -1430,7 +1485,7 @@ export function AppShell({ user, theme, onToggleTheme, onLoggedOut }: AppShellPr
             void saveNow()
           }}
           theme={theme}
-          onToggleTheme={onToggleTheme}
+          onSelectTheme={onSelectTheme}
           drawerMode={drawerMode}
           compact={compact}
           onToggleSidebar={() => {

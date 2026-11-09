@@ -7,6 +7,7 @@ import { Button } from '@/components/Button'
 import { useToast } from '@/components/Toast'
 import { IconAlert, IconBook, IconEye, IconEyeOff, IconMoon, IconSun } from '@/components/Icon'
 import { TextField } from '@/components/TextField'
+import { nextTheme, themeOption } from './theme'
 import type { Theme } from './theme'
 
 export interface LoginPageProps {
@@ -174,10 +175,10 @@ export function LoginPage({ theme, onToggleTheme, onSuccess }: LoginPageProps) {
         type="button"
         className="kb-theme-fab"
         onClick={onToggleTheme}
-        aria-label={theme === 'dark' ? '切换到浅色主题' : '切换到深色主题'}
-        title={theme === 'dark' ? '切换到浅色主题' : '切换到深色主题'}
+        aria-label={`切换主题（当前：${themeOption(theme).label}，下一套：${themeOption(nextTheme(theme)).label}）`}
+        title={`切换主题（当前：${themeOption(theme).label}）`}
       >
-        {theme === 'dark' ? <IconSun size={17} /> : <IconMoon size={17} />}
+        {themeOption(theme).dark ? <IconSun size={17} /> : <IconMoon size={17} />}
       </button>
 
       <div className="kb-login__card">

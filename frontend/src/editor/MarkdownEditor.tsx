@@ -98,10 +98,11 @@ const readOnlyCompartment = new Compartment()
 
 let uploadSeq = 0
 
+/** CodeMirror 的 dark 标志：深色 / 墨夜两套算暗色，纸张是浅色 */
 function isDarkTheme(): boolean {
   const attr = document.documentElement.dataset.theme
-  if (attr === 'dark') return true
-  if (attr === 'light') return false
+  if (attr === 'dark' || attr === 'midnight') return true
+  if (attr === 'light' || attr === 'paper') return false
   return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false
 }
 

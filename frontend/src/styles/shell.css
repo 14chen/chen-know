@@ -810,6 +810,9 @@
 }
 
 .kb-topbar {
+  /* 顶栏有 backdrop-filter（自带层叠上下文），主题菜单等浮层要压过大纲卡片(z=20) */
+  position: relative;
+  z-index: 40;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -978,18 +981,22 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-width: calc(var(--editor-max) + var(--sp-5) * 2);
+  /* 正文缩放时列宽跟着放宽：否则 200% 下一行只剩二十来个字 */
+  max-width: min(100%, calc(var(--editor-max) * var(--read-zoom, 1) + var(--sp-5) * 2));
   margin: 0 auto;
-  padding: var(--sp-6) var(--sp-5) var(--sp-7);
+  padding: var(--sp-6) var(--sp-5) var(--sp-6);
+  /* 底部给悬浮的阅读工具条留位，滚到底时最后一行不会被盖住 */
+  padding-bottom: calc(var(--sp-6) + 46px);
+
 }
 
 /* 宽屏：占满可用宽度（顶栏「宽屏/窄栏」切换）。
    仍然夹一个上限，否则 1920 屏上单行能到 120 个汉字，回读必须转头。 */
 .kb-editor-region--wide .kb-editor-pane {
-  max-width: min(100%, 100ch);
+  max-width: min(100%, calc(100ch * var(--read-zoom, 1)));
 }
 
-.kb-editor-pane > .kb-editor {
+.kb-read-surface > .kb-editor {
   flex: 1 1 auto;
   min-height: 0;
 }
@@ -1371,3 +1378,252 @@ button.kb-topbar__subject:hover .kb-topbar__subject-pen {
   }
 }
 
+
+
+/* ==========================================================================
+   正文阅读工具（缩放 + 编辑/阅读）与主题选择菜单
+   ========================================================================== */
+
+/* 正文缩放层：放大的是这一层的字号 token，版面按新字号重排。
+   不用 zoom / transform —— zoom 会把 CodeMirror 的百分比高度算塌（视口被压成 48px），
+   transform 又会给内部的 fixed 浮层（格式条、菜单）造出新的包含块。 */
+.kb-read-surface {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+  --fs-xs: calc(12px * var(--read-zoom, 1));
+  --fs-sm: calc(13px * var(--read-zoom, 1));
+  --fs-base: calc(15px * var(--read-zoom, 1));
+  --fs-md: calc(15px * var(--read-zoom, 1));
+  --fs-lg: calc(18px * var(--read-zoom, 1));
+  --fs-xl: calc(22px * var(--read-zoom, 1));
+  --fs-2xl: calc(28px * var(--read-zoom, 1));
+}
+
+.kb-readbar {
+  position: absolute;
+  bottom: var(--sp-3);
+  /* 居中用左右 auto 边距 + max-content：若写成 left:50% + translate，
+     收缩宽度会被「半个容器」卡住，窗口一窄按钮就挤成两行 */
+  left: 0;
+  right: 0;
+  width: max-content;
+  max-width: calc(100% - var(--sp-4));
+  margin: 0 auto;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(10px);
+}
+
+.kb-readbar__group {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+}
+
+.kb-readbar__sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 2px;
+  background: var(--border);
+}
+
+.kb-readbar__mode {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--r-full);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+}
+
+.kb-readbar__mode:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+
+.kb-readbar__mode.is-active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.kb-readbar__step {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-full);
+  color: var(--text-secondary);
+  font-size: 15px;
+  line-height: 1;
+}
+
+.kb-readbar__step:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+
+.kb-readbar__step:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+
+.kb-readbar__range {
+  width: 88px;
+  height: 18px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.kb-readbar__value {
+  min-width: 48px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--r-full);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.kb-readbar__value:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+
+.kb-readbar button:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+/* 窄屏：滑杆收起，只留 −/+ 与百分比 */
+@media (max-width: 899px) {
+  .kb-readbar {
+    bottom: var(--sp-3);
+  }
+
+  .kb-readbar__range {
+    display: none;
+  }
+}
+
+/* 触摸设备：按钮撑到 40px */
+@media (pointer: coarse) {
+  .kb-readbar__mode,
+  .kb-readbar__step,
+  .kb-readbar__value {
+    height: 40px;
+  }
+
+  .kb-readbar__step {
+    width: 40px;
+  }
+
+  .kb-readbar__mode {
+    padding: 0 12px;
+  }
+}
+
+/* ---- 主题菜单（顶栏与左栏收起态共用）--------------------------------- */
+.kb-theme {
+  position: relative;
+  display: inline-flex;
+}
+
+.kb-theme__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: var(--z-dropdown);
+  width: 236px;
+  padding: var(--sp-1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-lg);
+  animation: kb-fade-in var(--dur-fast) var(--ease);
+}
+
+/* 左栏收起态的窄条里向右展开 */
+.kb-theme--rail .kb-theme__menu {
+  top: 0;
+  right: auto;
+  left: calc(100% + var(--sp-2));
+}
+
+.kb-theme__item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: var(--sp-2);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  text-align: left;
+}
+
+.kb-theme__item:hover {
+  background: var(--bg-subtle);
+}
+
+.kb-theme__item[aria-checked='true'] {
+  background: var(--accent-soft);
+}
+
+.kb-theme__item:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.kb-theme__swatch {
+  display: inline-flex;
+  flex: none;
+  width: 34px;
+  height: 22px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+
+.kb-theme__swatch > span {
+  flex: 1;
+}
+
+.kb-theme__labels {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.kb-theme__label {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.kb-theme__hint {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-theme__check {
+  display: inline-flex;
+  margin-left: auto;
+  color: var(--accent);
+}

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/Button'
-import { IconMenu, IconMoon, IconPanelLeft, IconSearch, IconSun } from '@/components/Icon'
+import { IconMenu, IconPanelLeft, IconSearch } from '@/components/Icon'
 import { SaveStatus } from './SaveStatus'
 import { IconContract, IconExpand } from './shellIcons'
+import { ThemeMenu } from './ThemeMenu'
 import type { Theme } from './theme'
 import type { SaveState } from './useNotes'
 
@@ -15,7 +16,8 @@ export interface TopbarProps {
   savedAt: number | null
   onRetrySave: () => void
   theme: Theme
-  onToggleTheme: () => void
+  /** 主题菜单：四套主题里直接选一套 */
+  onSelectTheme: (theme: Theme) => void
   /** 平板/手机：侧栏是抽屉，需要菜单按钮 */
   drawerMode: boolean
   onToggleSidebar: () => void
@@ -137,7 +139,7 @@ export function Topbar({
   savedAt,
   onRetrySave,
   theme,
-  onToggleTheme,
+  onSelectTheme,
   drawerMode,
   onToggleSidebar,
   compact,
@@ -242,14 +244,7 @@ export function Topbar({
           </Button>
         )}
 
-        <Button
-          variant="icon"
-          onClick={onToggleTheme}
-          aria-label={theme === 'dark' ? '切换到浅色主题' : '切换到深色主题'}
-          title={theme === 'dark' ? '切换到浅色主题' : '切换到深色主题'}
-        >
-          {theme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
-        </Button>
+        <ThemeMenu theme={theme} onSelect={onSelectTheme} />
       </div>
 
       {compact && searchOpen ? (

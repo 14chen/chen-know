@@ -10,7 +10,7 @@ import { LoginPage } from '@/shell/LoginPage'
 import { useTheme } from '@/shell/theme'
 
 export default function App() {
-  const { theme, toggleTheme } = useTheme()
+  const { theme, setTheme, cycleTheme } = useTheme()
   const [user, setUser] = useState<User | null>(null)
   const [booting, setBooting] = useState(true)
 
@@ -50,11 +50,11 @@ export default function App() {
           <AppShell
             user={user}
             theme={theme}
-            onToggleTheme={toggleTheme}
+            onSelectTheme={setTheme}
             onLoggedOut={() => setUser(null)}
           />
         ) : (
-          <LoginPage theme={theme} onToggleTheme={toggleTheme} onSuccess={setUser} />
+          <LoginPage theme={theme} onToggleTheme={cycleTheme} onSuccess={setUser} />
         )}
       </ConfirmProvider>
     </ToastProvider>

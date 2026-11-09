@@ -64,6 +64,18 @@ export function IconBriefing(props: ShellIconProps) {
   )
 }
 
+/** 调色板：主题选择 */
+export function IconPalette(props: ShellIconProps) {
+  return (
+    <Glyph {...props}>
+      <path d="M12 3a9 9 0 1 0 0 18h1.2a2 2 0 0 0 0-4h-.7a1.6 1.6 0 0 1 0-3.2H16a5 5 0 0 0 5-5c0-3.2-4-5.8-9-5.8Z" />
+      <circle cx="7.6" cy="10.4" r="1.1" fill="currentColor" stroke="none" />
+      <circle cx="10.6" cy="7.2" r="1.1" fill="currentColor" stroke="none" />
+      <circle cx="15.4" cy="7.8" r="1.1" fill="currentColor" stroke="none" />
+    </Glyph>
+  )
+}
+
 /** 向内箭头：切回「窄栏」 */
 export function IconContract(props: ShellIconProps) {
   return (

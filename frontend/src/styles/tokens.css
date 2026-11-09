@@ -1,7 +1,9 @@
 /* ==========================================================================
    设计 token —— 契约 PROTOTYPE.md §3 冻结的变量名；取值由 p-shell 定义。
    p-editor 只许引用这些变量，不得自己写颜色字面量。
-   主题机制：<html data-theme="light|dark">，由 src/shell/theme.ts 与 index.html 引导脚本维护。
+   主题机制：<html data-theme="light|dark|paper|midnight">，
+   由 src/shell/theme.ts 与 index.html 引导脚本维护；每套主题只需在这里补一块 token，
+   组件（含 CodeMirror 编辑器）全部引用变量，不写颜色字面量。
    ========================================================================== */
 
 :root {
@@ -140,3 +142,85 @@
   --ring: 0 0 0 3px rgba(139, 147, 248, 0.32);
   --scrim: rgba(0, 0, 0, 0.56);
 }
+
+/* ---- 纸张主题（暖白纸感：长文、白天阅读，降低蓝光刺激）---------------- */
+:root[data-theme='paper'] {
+  color-scheme: light;
+
+  --bg: #f4efe6;
+  --bg-subtle: #ece4d6;
+  --bg-muted: #e2d8c7;
+
+  --surface: #fdfaf3;
+  --surface-raised: #fffdf8;
+
+  --border: #ddd2bf;
+  --border-strong: #c2b39a;
+
+  --text: #241f19;
+  --text-secondary: #574d40;
+  /* 4.8:1 起（--bg / --bg-subtle 上都过 AA），保持「次要但不糊」 */
+  --text-muted: #6f6150;
+
+  --accent: #8f4a1b;
+  --accent-hover: #74390f;
+  --accent-soft: rgba(143, 74, 27, 0.12);
+  --selection-bg: rgba(143, 74, 27, 0.26);
+
+  --danger: #b3261e;
+  --danger-soft: rgba(179, 38, 30, 0.12);
+  --success: #2f6f3e;
+  --warning: #8a5a09;
+
+  --code-bg: #efe7d8;
+  --code-text: #7b3f6b;
+
+  --shadow-sm: 0 1px 2px rgba(74, 58, 35, 0.08), 0 1px 3px rgba(74, 58, 35, 0.05);
+  --shadow: 0 4px 14px rgba(74, 58, 35, 0.1), 0 1px 3px rgba(74, 58, 35, 0.05);
+  --shadow-lg: 0 20px 44px rgba(74, 58, 35, 0.18), 0 4px 12px rgba(74, 58, 35, 0.08);
+
+  --on-accent: #ffffff;
+  --ring: 0 0 0 3px rgba(143, 74, 27, 0.26);
+  --scrim: rgba(46, 37, 24, 0.42);
+}
+
+/* ---- 墨夜主题（青墨低亮：比深色更暗、主色换成青绿，久看不累）---------- */
+:root[data-theme='midnight'] {
+  color-scheme: dark;
+
+  --bg: #0b1114;
+  --bg-subtle: #111a1e;
+  --bg-muted: #16242a;
+
+  --surface: #0f171b;
+  --surface-raised: #16232a;
+
+  --border: #23323a;
+  --border-strong: #354a55;
+
+  --text: #e6efee;
+  --text-secondary: #a9bcbd;
+  --text-muted: #85999c;
+
+  --accent: #5eead4;
+  --accent-hover: #99f6e4;
+  --accent-soft: rgba(94, 234, 212, 0.14);
+  --selection-bg: rgba(94, 234, 212, 0.3);
+
+  --danger: #fb7185;
+  --danger-soft: rgba(251, 113, 133, 0.16);
+  --success: #6ee7b7;
+  --warning: #fcd34d;
+
+  --code-bg: #142026;
+  --code-text: #f9a8d4;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow: 0 6px 18px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 24px 52px rgba(0, 0, 0, 0.62), 0 6px 16px rgba(0, 0, 0, 0.4);
+
+  --on-accent: #06201c;
+  --ring: 0 0 0 3px rgba(94, 234, 212, 0.3);
+  --scrim: rgba(0, 0, 0, 0.6);
+}
+

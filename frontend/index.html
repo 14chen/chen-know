@@ -26,7 +26,8 @@
               theme = raw
             }
           }
-          if (theme !== 'light' && theme !== 'dark') {
+          var known = ['light', 'dark', 'paper', 'midnight']
+          if (known.indexOf(theme) < 0) {
             theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
           }
           document.documentElement.setAttribute('data-theme', theme)

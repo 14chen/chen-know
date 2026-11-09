@@ -26,7 +26,8 @@
               theme = raw
             }
           }
-          if (theme !== 'light' && theme !== 'dark') {
+          var known = ['light', 'dark', 'paper', 'midnight']
+          if (known.indexOf(theme) < 0) {
             theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
           }
           document.documentElement.setAttribute('data-theme', theme)
@@ -35,9 +36,9 @@
         }
       })()
     </script>
-    <script type="module" crossorigin src="/assets/index-urjjG7PQ.js"></script>
+    <script type="module" crossorigin src="/assets/index-Bmk8IvWQ.js"></script>
     <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-4tVxZq34.js">
-    <link rel="stylesheet" crossorigin href="/assets/index-LDESi4a9.css">
+    <link rel="stylesheet" crossorigin href="/assets/index-BsSOSVn7.css">
   </head>
   <body>
     <div id="root"></div>
