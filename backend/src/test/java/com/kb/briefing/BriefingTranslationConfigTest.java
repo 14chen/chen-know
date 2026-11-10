@@ -40,17 +40,17 @@ class BriefingTranslationConfigTest {
     @Test
     @DisplayName("auto：有 key 用 DeepL（free/pro 按后缀），没 key 用 MyMemory")
     void autoPicksByKey() {
-        assertEquals("deepl(free)", providerOf("auto", "abc:fx", null));
-        assertEquals("deepl(pro)", providerOf("auto", "abc", null));
+        assertEquals("deepl(free)→mymemory", providerOf("auto", "abc:fx", null));
+        assertEquals("deepl(pro)→mymemory", providerOf("auto", "abc", null));
         assertEquals("mymemory", providerOf("auto", "", null));
         assertEquals("mymemory", providerOf("", "", null));
     }
 
     @Test
-    @DisplayName("显式 deepl 但没 key → 回落 MyMemory（不让简报因此失败）")
+    @DisplayName("显式 deepl 但没 key → 回落 MyMemory；有 key 时带运行期回落")
     void deeplWithoutKeyFallsBack() {
         assertEquals("mymemory", providerOf("deepl", "", null));
-        assertEquals("deepl(free)", providerOf("deepl", "k:fx", null));
+        assertEquals("deepl(free)→mymemory", providerOf("deepl", "k:fx", null));
     }
 
     @Test

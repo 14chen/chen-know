@@ -11,12 +11,14 @@ import org.springframework.context.annotation.Configuration;
  *
  * <ul>
  *   <li>{@code auto}（默认）：配了 deepl-key 就用 DeepL，否则 MyMemory</li>
- *   <li>{@code deepl}：显式用 DeepL（没配 key 时 WARN 并回落到 MyMemory，不让简报因此失败）</li>
+ *   <li>{@code deepl}：显式用 DeepL（没配 key 时 WARN 并回落到 MyMemory；运行中鉴权失败或额度
+ *       耗尽时也会自动改用 MyMemory，不让简报整篇停在英文）</li>
  *   <li>{@code mymemory}：显式用 MyMemory</li>
  *   <li>{@code none}：完全不翻译，一律保留原文</li>
  * </ul>
  *
- * <p>启动时打一行 INFO 说明实际用的是哪个 provider（<b>不打印 key</b>）。
+ * <p>启动时打一行 INFO 说明实际用的是哪个 provider（<b>不打印 key</b>）；带运行期回落时形如
+ * {@code deepl(free)→mymemory}。
  */
 @Configuration
 public class BriefingTranslationConfig {
@@ -45,14 +47,21 @@ public class BriefingTranslationConfig {
                     log.warn("kb.briefing.translate-provider=deepl 但没配 deepl-key，回落到 MyMemory");
                     yield new MyMemoryTranslationClient(transport);
                 }
-                yield new DeepLTranslationClient(transport, key, properties.getDeeplEndpoint());
+                yield withRuntimeFallback(new DeepLTranslationClient(transport, key,
+                        properties.getDeeplEndpoint()), transport);
             }
             default -> {
                 if (!key.isEmpty()) {
-                    yield new DeepLTranslationClient(transport, key, properties.getDeeplEndpoint());
+                    yield withRuntimeFallback(new DeepLTranslationClient(transport, key,
+                            properties.getDeeplEndpoint()), transport);
                 }
                 yield new MyMemoryTranslationClient(transport);
             }
         };
+    }
+
+    /** 主翻译失败时改用 MyMemory：DeepL key 失效是最常见的「整篇英文」成因。 */
+    private static TranslationClient withRuntimeFallback(TranslationClient primary, HttpTransport transport) {
+        return new FallbackTranslationClient(primary, new MyMemoryTranslationClient(transport));
     }
 }
