@@ -48,8 +48,18 @@ if defined OUT echo [ok] wrote %PACKED% (the installed jar is unchanged) & exit 
 set "BACKUP=%JAR%.old-static"
 copy /y "%JAR%" "%BACKUP%" >nul
 if errorlevel 1 echo [x] cannot back up the jar - stop the running app first & del /q "%PACKED%" >nul 2>&1 & exit /b 1
+rem move is a rename on one volume; AV or the indexer can briefly deny it,
+rem while copy still succeeds - so fall back to copy + delete.
 move /y "%PACKED%" "%JAR%" >nul
+if errorlevel 1 goto replace_by_copy
+goto replaced
+
+:replace_by_copy
+copy /y "%PACKED%" "%JAR%" >nul
 if errorlevel 1 echo [x] cannot replace the jar - stop the running app first & exit /b 1
+del /q "%PACKED%" >nul 2>&1
+
+:replaced
 echo [ok] new static packed into %JAR%
 echo [i] previous jar kept as %BACKUP%
 echo [i] start with scripts\start.cmd, then hard-refresh the browser once
