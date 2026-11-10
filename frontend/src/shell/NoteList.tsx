@@ -204,7 +204,7 @@ export function NoteList({
         )
       ) : (
         <ul className="kb-note-list">
-          {items.map((item) => (
+          {items.map((item, index) => (
             <li key={item.id}>
               <div
                 className={[
@@ -246,8 +246,12 @@ export function NoteList({
                   title={`拖到左侧目录可移动：${item.title || '无标题'}`}
                 >
                   <span className="kb-note-item__title">
+                    {/* 序号跟着当前目录的列表走：切换目录后 items 变了，序号自然从 1 开始 */}
+                    <span className="kb-note-item__index" aria-hidden="true">
+                      {index + 1}
+                    </span>
                     {item.isPinned ? <span className="kb-note-item__pin">置顶</span> : null}
-                    {item.title || '无标题'}
+                    <span className="kb-note-item__text">{item.title || '无标题'}</span>
                   </span>
                   {plainExcerpt(item.excerpt, item.title) ? (
                     <span className="kb-note-item__excerpt">

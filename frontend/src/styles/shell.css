@@ -433,6 +433,8 @@
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  /* 滚到顶/底后不要再把手势传给下一个滚动区，否则整页会跟着动 */
+  overscroll-behavior: contain;
   padding: 0 var(--sp-2) var(--sp-2);
 }
 
@@ -603,6 +605,7 @@
   padding: 0 var(--sp-2) var(--sp-4);
   overflow-y: auto;
   overflow-x: hidden;
+  overscroll-behavior: contain;
   list-style: none;
 }
 
@@ -753,6 +756,25 @@
 .kb-note-item--active .kb-note-item__title {
   color: var(--accent);
   font-weight: 600;
+}
+
+/* 序号：等宽数字右对齐，标题行第一位；目录切换后按新列表重新从 1 开始 */
+.kb-note-item__index {
+  flex: none;
+  min-width: 1.5em;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--text-muted);
+}
+
+.kb-note-item__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .kb-note-item__pin {
@@ -994,6 +1016,111 @@
    仍然夹一个上限，否则 1920 屏上单行能到 120 个汉字，回读必须转头。 */
 .kb-editor-region--wide .kb-editor-pane {
   max-width: min(100%, calc(100ch * var(--read-zoom, 1)));
+}
+
+/* ---- 笔记阅读布局：宽屏两侧功能栏（≥1680px 才出现）------------------- */
+/* 左栏=本篇信息，右栏=大纲 / 上下篇 / 相关笔记。窄屏两侧栏不占位，
+   正文列与原来完全一致，所以小屏布局不受影响。
+   阈值算法：288 侧栏 + 212 左栏 + 16 + 868 正文列（820 正文 + 左右内边距）+ 16 + 212 右栏 = 1612，
+   取 1680 留一点余量；再窄就不加侧栏，宁可不要功能也不挤窄正文。 */
+.kb-note-layout {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  justify-content: center;
+  gap: var(--sp-4);
+}
+
+.kb-note-rail {
+  flex: none;
+  width: 212px;
+  padding: var(--sp-6) 0;
+  display: none;
+  flex-direction: column;
+  gap: var(--sp-3);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+@media (min-width: 1680px) {
+  .kb-note-rail {
+    display: flex;
+  }
+
+  /* 侧栏贴着正文列排成一组，整组居中；空余留在两侧，而不是把栏推到屏幕边缘 */
+  .kb-note-layout .kb-editor-pane {
+    flex: 0 1 auto;
+    width: 100%;
+    margin: 0;
+  }
+}
+
+.kb-railcard {
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.kb-railcard__title {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.kb-railcard__facts {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.kb-railcard__facts > div {
+  display: flex;
+  gap: var(--sp-2);
+  justify-content: space-between;
+}
+
+.kb-railcard__facts dt {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.kb-railcard__facts dd {
+  margin: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.kb-railcard__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: var(--sp-2);
+}
+
+.kb-railcard__tag {
+  padding: 2px 7px;
+  border-radius: var(--r-full);
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+/* 右栏里的相关笔记已经是卡片的一部分，去掉自带的分隔线与上边距 */
+.kb-note-rail .kb-related {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.kb-note-rail .kb-outline__list {
+  padding-right: 0;
 }
 
 .kb-read-surface > .kb-editor {

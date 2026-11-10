@@ -23,7 +23,7 @@ import { Sidebar } from './Sidebar'
 import { ThemeMenu } from './ThemeMenu'
 import { Topbar } from './Topbar'
 import { formatBytes, formatDateTime, formatRelativeTime } from './time'
-import { useBreakpoint, isDrawerBreakpoint } from './useResponsive'
+import { useBreakpoint, isDrawerBreakpoint, useMediaQuery } from './useResponsive'
 import { useHashRoute } from './useHashRoute'
 import { useNotes } from './useNotes'
 import { collectDescendantIds, countSubtreeNotes, findFolder, useTree } from './useTree'
@@ -379,11 +379,14 @@ function NoteOutline({
   noteId,
   noteTitle,
   editorRef,
+  variant = 'float',
 }: {
   content: string
   noteId: number
   noteTitle: string
   editorRef: RefObject<MarkdownEditorHandle | null>
+  /** rail：宽屏右栏里的常驻版本，宽度由右栏决定，不再浮动/收起 */
+  variant?: 'float' | 'rail'
 }) {
   const [open, setOpen] = useState<boolean>(() => {
     try {
@@ -553,6 +556,19 @@ function NoteOutline({
     </ul>
   )
 
+  // 宽屏右栏：常驻显示，高度由右栏统一滚动；「收起」在这里没有意义（右栏本身就是收起的替代）
+  if (variant === 'rail') {
+    return (
+      <div className="kb-outline kb-outline--rail" aria-label="文章大纲">
+        <div className="kb-outline__head">
+          <span className="kb-outline__title">大纲</span>
+          <span className="kb-outline__count">{items.length}</span>
+        </div>
+        {list}
+      </div>
+    )
+  }
+
   if (phone) {
     return (
       <div className="kb-outline kb-outline--mobile">
@@ -689,9 +705,30 @@ interface RelatedNote {
   score: number
 }
 
+const RELATED_OPEN_KEY = 'kb.related.open'
+
 function RelatedNotes({ noteId, onOpen }: { noteId: number; onOpen: (id: number) => void }) {
   const [items, setItems] = useState<RelatedNote[] | null>(null)
   const [slow, setSlow] = useState(false)
+  const [open, setOpen] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem(RELATED_OPEN_KEY) !== '0'
+    } catch {
+      return true
+    }
+  })
+  const listId = 'kb-related-list-' + noteId
+  const toggle = () => {
+    setOpen((current) => {
+      const next = !current
+      try {
+        window.localStorage.setItem(RELATED_OPEN_KEY, next ? '1' : '0')
+      } catch {
+        /* 隐私模式写不了 localStorage，折叠状态只在本次会话有效 */
+      }
+      return next
+    })
+  }
 
   useEffect(() => {
     const controller = new AbortController()
@@ -716,7 +753,7 @@ function RelatedNotes({ noteId, onOpen }: { noteId: number; onOpen: (id: number)
   }, [noteId])
 
   if (items === null) {
-    if (!slow) return null
+    if (!slow || !open) return null
     return (
       <section className="kb-related" aria-busy="true">
         <div className="kb-related__head">
@@ -735,19 +772,32 @@ function RelatedNotes({ noteId, onOpen }: { noteId: number; onOpen: (id: number)
   return (
     <section className="kb-related" aria-label="相关笔记">
       <div className="kb-related__head">
-        <h2 className="kb-related__title">相关笔记</h2>
-        <span className="kb-related__count">{items.length} 条</span>
+        <h2 className="kb-related__title">
+          <button
+            type="button"
+            className="kb-related__toggle"
+            aria-expanded={open}
+            aria-controls={listId}
+            onClick={toggle}
+          >
+            <span>相关笔记</span>
+            <span className="kb-related__count">{items.length} 条</span>
+            <span className="kb-related__chev" aria-hidden="true" />
+          </button>
+        </h2>
       </div>
-      <ul className="kb-related__list">
-        {items.slice(0, 5).map((item) => (
-          <li key={item.id}>
-            <button type="button" className="kb-related__row" onClick={() => onOpen(item.id)}>
-              <span className="kb-related__name">{item.title || '未命名笔记'}</span>
-              <span className="kb-related__reason">{item.reasonLabel}</span>
-            </button>
-          </li>
-        ))}
-      </ul>
+      {open ? (
+        <ul className="kb-related__list" id={listId}>
+          {items.slice(0, 5).map((item) => (
+            <li key={item.id}>
+              <button type="button" className="kb-related__row" onClick={() => onOpen(item.id)}>
+                <span className="kb-related__name">{item.title || '未命名笔记'}</span>
+                <span className="kb-related__reason">{item.reasonLabel}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </section>
   )
 }
@@ -756,10 +806,13 @@ function NotePrevNext({
   items,
   currentId,
   onOpen,
+  layout = 'row',
 }: {
   items: { id: number; title: string }[]
   currentId: number
   onOpen: (id: number) => void
+  /** stack：右栏里的竖排紧凑版（左对齐、无分隔线） */
+  layout?: 'row' | 'stack'
 }) {
   const index = items.findIndex((item) => item.id === currentId)
   if (index < 0) return null
@@ -767,7 +820,7 @@ function NotePrevNext({
   const next = index < items.length - 1 ? items[index + 1] : null
   if (!prev && !next) return null
   return (
-    <nav className="kb-pn" aria-label="上一篇 / 下一篇">
+    <nav className={layout === 'stack' ? 'kb-pn kb-pn--stack' : 'kb-pn'} aria-label="上一篇 / 下一篇">
       {prev ? (
         <button type="button" className="kb-pn__card is-prev" onClick={() => onOpen(prev.id)}>
           <span className="kb-pn__dir">← 上一篇</span>
@@ -786,6 +839,68 @@ function NotePrevNext({
         <span className="kb-pn__ghost">已经是最后一篇</span>
       )}
     </nav>
+  )
+}
+
+/** 宽屏左栏：本篇的静态信息（目录/字数/阅读时长/时间/版本/标签），只读。 */
+function NoteInfoRail({
+  folderLabel,
+  content,
+  createdAt,
+  updatedAt,
+  version,
+  tags,
+}: {
+  folderLabel: string
+  content: string
+  createdAt: string
+  updatedAt: string
+  version: number
+  tags: string[]
+}) {
+  const chars = content.replace(/\s+/g, '').length
+  const minutes = Math.max(1, Math.round(chars / 400))
+  return (
+    <aside className="kb-note-rail" aria-label="笔记信息">
+      <div className="kb-railcard">
+        <p className="kb-railcard__title">本篇</p>
+        <dl className="kb-railcard__facts">
+          <div>
+            <dt>目录</dt>
+            <dd>{folderLabel}</dd>
+          </div>
+          <div>
+            <dt>字数</dt>
+            <dd>{chars.toLocaleString('zh-CN')} 字</dd>
+          </div>
+          <div>
+            <dt>阅读</dt>
+            <dd>约 {minutes} 分钟</dd>
+          </div>
+          <div>
+            <dt>创建</dt>
+            <dd>{formatDateTime(createdAt).slice(0, 10)}</dd>
+          </div>
+          <div>
+            <dt>更新</dt>
+            <dd>{formatRelativeTime(updatedAt)}</dd>
+          </div>
+          <div>
+            <dt>版本</dt>
+            <dd>第 {version} 版</dd>
+          </div>
+        </dl>
+        {tags.length > 0 ? (
+          <div className="kb-railcard__tags">
+            {tags.map((tag) => (
+              <span key={tag} className="kb-railcard__tag">
+                #{tag}
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </aside>
   )
 }
 
@@ -849,6 +964,8 @@ export function AppShell({ user, theme, onSelectTheme, onLoggedOut }: AppShellPr
   const tree = useTree()
   const { route, navigate } = useHashRoute()
   const breakpoint = useBreakpoint()
+  // 宽屏（≥1680）：正文两侧各留一栏做功能，正文列保持 820px 舒适行宽
+  const railMode = useMediaQuery('(min-width: 1680px)')
   const drawerMode = isDrawerBreakpoint(breakpoint)
   const compact = breakpoint === 'phone'
 
@@ -1301,8 +1418,23 @@ export function AppShell({ user, theme, onSelectTheme, onLoggedOut }: AppShellPr
       </div>
     )
   } else if (selectedId !== null) {
+    const railMeta = notes.selectedMeta
+    const railPath = folderPath(tree.tree, railMeta ? railMeta.folderId : null)
+    const railFolder = railPath.length > 0 ? railPath.map((node) => node.name).join(' / ') : '全部笔记'
+    const railTags = items.find((item) => item.id === selectedId)?.tags.map((tag) => tag.name) ?? []
     editorArea = (
-      <>
+      <div className="kb-note-layout">
+        {/* 宽屏左栏：本篇信息（窄屏不渲染，正文列宽度完全不变） */}
+        {railMode && railMeta ? (
+          <NoteInfoRail
+            folderLabel={railFolder}
+            content={notes.content}
+            createdAt={railMeta.createdAt}
+            updatedAt={railMeta.updatedAt}
+            version={railMeta.version}
+            tags={railTags}
+          />
+        ) : null}
         <div className="kb-editor-pane" style={zoomStyle(readZoom)}>
           <ReadingProgress noteId={selectedId} />
           {/* 缩放只作用于正文这层：工具条与右侧大纲保持原大小 */}
@@ -1340,13 +1472,17 @@ export function AppShell({ user, theme, onSelectTheme, onLoggedOut }: AppShellPr
               />
             </Suspense>
           </div>
-          {/* 尾部导航与相关笔记不跟随缩放：否则放大后它们会挤占正文视口 */}
-          <NotePrevNext
-            items={visibleNotes}
-            currentId={selectedId}
-            onOpen={(id) => navigateWithFlush('notes', { id })}
-          />
-          <RelatedNotes noteId={selectedId} onOpen={(id) => navigateWithFlush('notes', { id })} />
+          {/* 尾部导航与相关笔记不跟随缩放；宽屏时它们搬到右栏，正文垂直空间全留给阅读 */}
+          {railMode ? null : (
+            <>
+              <NotePrevNext
+                items={visibleNotes}
+                currentId={selectedId}
+                onOpen={(id) => navigateWithFlush('notes', { id })}
+              />
+              <RelatedNotes noteId={selectedId} onOpen={(id) => navigateWithFlush('notes', { id })} />
+            </>
+          )}
           <ReadBar
             zoom={readZoom}
             onZoom={(next) => setReadZoom(clampZoom(next))}
@@ -1354,14 +1490,38 @@ export function AppShell({ user, theme, onSelectTheme, onLoggedOut }: AppShellPr
             onReadMode={setReadMode}
           />
         </div>
-        {/* 大纲是 fixed 浮层，放在缩放层外面，缩放不会把它一起放大 */}
-        <NoteOutline
-          content={notes.content}
-          noteId={selectedId}
-          noteTitle={notes.selectedTitle}
-          editorRef={editorRef}
-        />
-      </>
+        {/* 宽屏右栏：大纲 + 上下篇 + 相关笔记；窄屏仍然是那个 fixed 浮层大纲 */}
+        {railMode ? (
+          <aside className="kb-note-rail" aria-label="阅读辅助">
+            <NoteOutline
+              variant="rail"
+              content={notes.content}
+              noteId={selectedId}
+              noteTitle={notes.selectedTitle}
+              editorRef={editorRef}
+            />
+            <div className="kb-railcard">
+              <p className="kb-railcard__title">翻页</p>
+              <NotePrevNext
+                layout="stack"
+                items={visibleNotes}
+                currentId={selectedId}
+                onOpen={(id) => navigateWithFlush('notes', { id })}
+              />
+            </div>
+            <div className="kb-railcard">
+              <RelatedNotes noteId={selectedId} onOpen={(id) => navigateWithFlush('notes', { id })} />
+            </div>
+          </aside>
+        ) : (
+          <NoteOutline
+            content={notes.content}
+            noteId={selectedId}
+            noteTitle={notes.selectedTitle}
+            editorRef={editorRef}
+          />
+        )}
+      </div>
     )
   } else {
     editorArea = (

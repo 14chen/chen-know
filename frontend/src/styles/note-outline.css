@@ -232,6 +232,45 @@
   margin-bottom: var(--sp-2);
 }
 
+/* 表头整体是折叠开关：点标题、计数或箭头都能收合 */
+.kb-related__toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.kb-related__toggle:hover {
+  color: var(--accent);
+}
+
+.kb-related__title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+.kb-related__chev {
+  width: 6px;
+  height: 6px;
+  margin-left: auto;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform var(--dur-fast) var(--ease);
+}
+
+.kb-related__toggle[aria-expanded='false'] .kb-related__chev {
+  transform: rotate(-45deg);
+}
+
 .kb-related__title {
   font-size: var(--fs-sm);
   font-weight: 650;
@@ -319,6 +358,20 @@
     min-height: 44px;
   }
 }
+/* 宽屏右栏里的常驻大纲：不再是 fixed 浮层，跟着右栏一起排、由右栏统一滚动 */
+.kb-outline--rail {
+  position: static;
+  width: 100%;
+  max-height: none;
+  padding: var(--sp-2);
+}
+
+.kb-outline--rail .kb-outline__list {
+  max-height: none;
+  overflow: visible;
+  padding: 0;
+}
+
 /* 平板：右侧抽屉 */
 /* 抽屉/手机模式只是一个容器，不能继承卡片外观（边框、底色、阴影都要撤掉） */
 .kb-outline--mobile,

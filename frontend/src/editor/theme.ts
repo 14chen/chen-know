@@ -51,6 +51,8 @@ const spec = {
     fontFamily: 'inherit',
     lineHeight: 'var(--lh-relaxed)',
     overflow: 'auto',
+    // 正文滚到顶/底后不要把手势交给页面（否则整屏会跟着弹）
+    overscrollBehavior: 'contain',
   },
   '.cm-content': {
     fontFamily: 'inherit',

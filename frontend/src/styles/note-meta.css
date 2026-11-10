@@ -134,6 +134,30 @@
   max-width: 100%;
 }
 
+/* 右栏里的上下篇：竖排紧凑，不再左右分栏 */
+.kb-pn--stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.kb-pn--stack .kb-pn__card {
+  min-height: 0;
+  padding: var(--sp-2) var(--sp-3);
+}
+
+.kb-pn--stack .kb-pn__card.is-next {
+  text-align: left;
+  align-items: flex-start;
+}
+
+.kb-pn--stack .kb-pn__title {
+  font-size: var(--fs-xs);
+}
+
 /* 只有一侧时留一个虚线占位格：整行拉满一张空卡看着像布局坏了 */
 .kb-pn__ghost {
   display: flex;

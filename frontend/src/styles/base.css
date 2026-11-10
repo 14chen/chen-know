@@ -12,6 +12,14 @@ html,
 body,
 #root {
   height: 100%;
+  /* 外壳本身就是 100dvh 的固定舞台：文档层永远不滚，
+     内层滚到边界后手势也不会传给页面，整屏不会跟着动 */
+  overflow: hidden;
+}
+
+html,
+body {
+  overscroll-behavior: none;
 }
 
 body {
