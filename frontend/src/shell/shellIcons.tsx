@@ -4,7 +4,7 @@ import type { ReactNode, SVGProps } from 'react'
  * 外壳自用的小图标。
  *
  * 共享图标集在 `@/components/Icon`（本轮文件边界不含 components/），
- * 因此这里就近定义外壳独有的三个，风格与共享图标集一致（24 格、currentColor 描边）。
+ * 因此这里就近定义外壳自用的图标，风格与共享图标集一致（24 格、currentColor 描边）。
  */
 
 export interface ShellIconProps extends Omit<SVGProps<SVGSVGElement>, 'children'> {
@@ -60,6 +60,29 @@ export function IconBriefing(props: ShellIconProps) {
       <path d="M16 9h2.5A1.5 1.5 0 0 1 20 10.5V19a2 2 0 0 1-2 2" />
       <path d="M7 8h6M7 11.5h6M7 15h3.5" />
       <path d="M18.5 3.5v2.2M17.4 4.6h2.2" />
+    </Glyph>
+  )
+}
+
+/** 关系图：三个节点两两相连 */
+export function IconGraph(props: ShellIconProps) {
+  return (
+    <Glyph {...props}>
+      <circle cx="12" cy="5.6" r="2.4" />
+      <circle cx="5.6" cy="18" r="2.4" />
+      <circle cx="18.4" cy="18" r="2.4" />
+      <path d="M10.9 7.8 6.9 15.8M13.1 7.8l4 8M8 18h8" />
+    </Glyph>
+  )
+}
+
+/** 开源周报：日历 + 一周的日期点 */
+export function IconWeekly(props: ShellIconProps) {
+  return (
+    <Glyph {...props}>
+      <rect x="3.5" y="5" width="17" height="15.5" rx="2.4" />
+      <path d="M3.5 9.6h17M8 3.2v3.4M16 3.2v3.4" />
+      <path d="M8 13h.01M12 13h.01M16 13h.01M8 17h.01M12 17h.01" />
     </Glyph>
   )
 }

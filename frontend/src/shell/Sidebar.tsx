@@ -19,7 +19,7 @@ import {
 import { VIEW_ENTRIES } from '@/views/registry'
 import { FolderTree } from './FolderTree'
 import { NoteList } from './NoteList'
-import { IconBriefing } from './shellIcons'
+import { IconBriefing, IconGraph, IconWeekly } from './shellIcons'
 
 const VIEW_ICONS: Record<string, ReactNode> = {
   search: <IconSearch size={16} />,
@@ -30,6 +30,8 @@ const VIEW_ICONS: Record<string, ReactNode> = {
   versions: <IconHistory size={16} />,
   trash: <IconTrash size={16} />,
   io: <IconUpload size={16} />,
+  graph: <IconGraph size={16} />,
+  weekly: <IconWeekly size={16} />,
   briefing: <IconBriefing size={16} />,
   stats: <IconChart size={16} />,
   admin: <IconUsers size={16} />,

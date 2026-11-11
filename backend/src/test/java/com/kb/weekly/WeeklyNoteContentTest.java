@@ -122,4 +122,23 @@ class WeeklyNoteContentTest {
         assertEquals(java.util.List.of("本周新增", "总星", "语言", "最近更新", "本周榜位", "仓库地址"),
                 java.util.List.copyOf(rows.keySet()));
     }
+
+    @Test
+    @DisplayName("4 参重载不追加教程；5 参把教程接在正文末尾")
+    void appendsTutorialOnlyWhenGiven() {
+        String without = WeeklyNoteContent.render(github("Go", "2026-10-24T08:00:00Z"), "2026-W44", "描述。", 1);
+        assertFalse(without.contains(RepoTutorial.HEADING), without);
+        String with = WeeklyNoteContent.render(github("Go", "2026-10-24T08:00:00Z"), "2026-W44", "描述。", 1,
+                RepoTutorial.HEADING + "\n\n正文");
+        assertTrue(with.contains(RepoTutorial.HEADING), with);
+        assertTrue(with.trim().endsWith("正文"), "教程要接在正文末尾");
+    }
+
+    @Test
+    @DisplayName("教程为空：与 4 参输出完全一致（不留空行）")
+    void blankTutorialKeepsOutput() {
+        String four = WeeklyNoteContent.render(github("Go", "2026-10-24T08:00:00Z"), "2026-W44", "描述。", 1);
+        String five = WeeklyNoteContent.render(github("Go", "2026-10-24T08:00:00Z"), "2026-W44", "描述。", 1, "  ");
+        assertEquals(four, five);
+    }
 }

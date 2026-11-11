@@ -21,6 +21,7 @@ import java.time.ZoneOffset;
 import java.time.temporal.WeekFields;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -54,6 +55,7 @@ public class WeeklyService {
     private final FolderService folderService;
     private final FolderRepository folderRepository;
     private final TranslationClient translation;
+    private final ReadmeFetcher readmeFetcher;
     private final UserRepository userRepository;
     private final SpaceRepository spaceRepository;
     private final Clock clock;
@@ -65,8 +67,8 @@ public class WeeklyService {
             GitHubRepoApi gitHubApi,
             GiteeWeeklyReader giteeReader, RepoStarSnapshots snapshots, WeeklyRepository repository,
             NoteService noteService, FolderService folderService, FolderRepository folderRepository,
-            TranslationClient translation, UserRepository userRepository, SpaceRepository spaceRepository,
-            Clock clock) {
+            TranslationClient translation, ReadmeFetcher readmeFetcher, UserRepository userRepository,
+            SpaceRepository spaceRepository, Clock clock) {
         this.properties = properties;
         this.gitHubClient = gitHubClient;
         this.gitHubApi = gitHubApi;
@@ -77,6 +79,7 @@ public class WeeklyService {
         this.folderService = folderService;
         this.folderRepository = folderRepository;
         this.translation = translation;
+        this.readmeFetcher = readmeFetcher;
         this.userRepository = userRepository;
         this.spaceRepository = spaceRepository;
         this.clock = clock;
@@ -178,29 +181,50 @@ public class WeeklyService {
                     .map(repo -> translateDescription(repo.description()))
                     .toList();
 
-            List<NoteRef> notes = new ArrayList<>(all.size());
+            // 先判重再抓 README：只有这次真的要新建的条目才发外网请求，重复运行不再抓。
+            NoteRef[] notes = new NoteRef[all.size()];
             int skipped = 0;
+            List<Integer> pending = new ArrayList<>();
             for (int index = 0; index < all.size(); index++) {
                 WeeklyRepo repo = all.get(index);
-                int rank = index < github.size() ? index + 1 : index - github.size() + 1;
-                String title = "[" + repo.sourceLabel() + "] " + repo.repo();
+                String title = titleOf(repo);
                 // 同一 ISO 周重复运行不产生重复笔记（按「周目录 + 标题」判重）
                 Optional<Long> existing = weekId == null ? Optional.empty()
                         : repository.findNoteId(spaceId, weekId, title);
                 if (existing.isPresent()) {
                     skipped++;
-                    notes.add(new NoteRef(existing.get(), title, repo.repo(), repo.url(), repo.weeklyStars()));
-                    continue;
+                    notes[index] = new NoteRef(existing.get(), title, repo.repo(), repo.url(),
+                            repo.weeklyStars());
+                } else {
+                    pending.add(index);
                 }
-                String content = WeeklyNoteContent.render(repo, isoWeek, descriptions.get(index), rank);
+            }
+
+            Map<String, ReadmeFetcher.Result> readmes = pending.isEmpty() || !properties.isTutorialEnabled()
+                    ? Map.of()
+                    : readmeFetcher.fetchAll(pending.stream().map(all::get).toList());
+
+            for (int index : pending) {
+                WeeklyRepo repo = all.get(index);
+                String title = titleOf(repo);
+                String tutorial = tutorialOf(repo, descriptions.get(index), readmes.get(ReadmeFetcher.key(repo)));
+                String content = WeeklyNoteContent.render(repo, isoWeek, descriptions.get(index),
+                        rankOf(index, github.size()), tutorial);
                 NoteDetail note = noteService.create(userId, spaceId,
                         new CreateNoteRequest(weekId, title, content));
                 List<String> tags = properties.getTags();
                 if (tags != null && !tags.isEmpty()) {
                     noteService.setTags(spaceId, note.id(), tags);
                 }
-                notes.add(new NoteRef(note.id(), note.title(), repo.repo(), repo.url(), repo.weeklyStars()));
+                notes[index] = new NoteRef(note.id(), note.title(), repo.repo(), repo.url(),
+                        repo.weeklyStars());
                 created++;
+            }
+            List<NoteRef> ordered = new ArrayList<>(notes.length);
+            for (NoteRef ref : notes) {
+                if (ref != null) {
+                    ordered.add(ref);
+                }
             }
             recordSnapshots(spaceId, github, gitee, notGithub(all, github), now);
 
@@ -211,7 +235,7 @@ public class WeeklyService {
             log.info("周报完成: {} status={} GitHub={} Gitee={} 新笔记={} 已存在跳过={} 耗时={}ms", isoWeek,
                     status, github.size(), gitee.size(), created, skipped,
                     System.currentTimeMillis() - startedMillis);
-            return new RunResponse(runId, isoWeek, status, created, skipped, notes, githubNote, giteeNote);
+            return new RunResponse(runId, isoWeek, status, created, skipped, ordered, githubNote, giteeNote);
         } catch (RuntimeException e) {
             String message = e.getMessage() == null || e.getMessage().isBlank()
                     ? e.getClass().getSimpleName() : e.getMessage();
@@ -260,6 +284,31 @@ public class WeeklyService {
                 .filter(repo -> !"github".equalsIgnoreCase(repo.source()))
                 .filter(repo -> github.stream().noneMatch(item -> item.repo().equals(repo.repo())))
                 .toList();
+    }
+
+    private static String titleOf(WeeklyRepo repo) {
+        return "[" + repo.sourceLabel() + "] " + repo.repo();
+    }
+
+    private static int rankOf(int index, int githubCount) {
+        return index < githubCount ? index + 1 : index - githubCount + 1;
+    }
+
+    /** 教程失败绝不影响周报：降级成「给个地址」，再不行就整段省略。 */
+    private String tutorialOf(WeeklyRepo repo, String descriptionZh, ReadmeFetcher.Result readme) {
+        try {
+            if (readme == null) {
+                return RepoTutorial.renderUnavailable(repo, "本次未抓取 README");
+            }
+            if (readme.ok()) {
+                return RepoTutorial.render(repo, descriptionZh, readme.url(), readme.markdown(),
+                        properties.getTutorialMaxLines());
+            }
+            return RepoTutorial.renderUnavailable(repo, readme.reason());
+        } catch (RuntimeException e) {
+            log.debug("教程生成失败（跳过教程）: {} ({})", repo.repo(), e.getMessage());
+            return null;
+        }
     }
 
     private String translateDescription(String description) {

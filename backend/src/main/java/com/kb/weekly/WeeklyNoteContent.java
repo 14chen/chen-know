@@ -33,6 +33,14 @@ public final class WeeklyNoteContent {
      * @param rank 在本源榜单里的名次（从 1 开始）
      */
     public static String render(WeeklyRepo repo, String isoWeek, String descriptionZh, int rank) {
+        return render(repo, isoWeek, descriptionZh, rank, null);
+    }
+
+    /**
+     * @param tutorial 已生成的「傻瓜教程」（由 {@link RepoTutorial} 产出）；为空则整段省略
+     */
+    public static String render(WeeklyRepo repo, String isoWeek, String descriptionZh, int rank,
+            String tutorial) {
         StringBuilder out = new StringBuilder();
         out.append("# [").append(repo.sourceLabel()).append("] ").append(repo.repo()).append("\n\n");
 
@@ -53,6 +61,9 @@ public final class WeeklyNoteContent {
         if (audience != null) {
             out.append("**适用人群**：").append(audience).append("（**").append(LANGUAGE_DISCLAIMER)
                     .append("**）。\n");
+        }
+        if (tutorial != null && !tutorial.isBlank()) {
+            out.append('\n').append(tutorial.strip()).append('\n');
         }
         return out.toString();
     }

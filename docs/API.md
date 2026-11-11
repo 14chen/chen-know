@@ -695,6 +695,8 @@ GET /api/briefing/sources
 | `GET /api/weekly/runs?limit=10` | 运行历史 |
 
 定时 `kb.weekly.cron=0 30 18 * * FRI`；应用启动时若当前 ISO 周没有成功记录会自动补跑一次。
+
+每篇正文在「一句话价值 / 推荐理由 / 适用人群」之后附一节 `## 傻瓜教程（自动生成）`：8 个三级小节（0 这是什么 / 1 动手前先备好 / 2 安装 / 3 跑通第一个例子 / 4 三个容易踩的坑 / 5 想继续深入 / 6 原文速览 / 7 备注）。命令与代码块摘自 `RepoTutorial` 从 README 解析出的围栏块（安装段与示例段按内容去重），散文是模板；README 抓不到时明说、不编命令。旧笔记不回溯。
 Gitee 数据来自 `data/weekly-gitee.json`（由 `tools/weekly/fetch-gitee.mjs` 用无头浏览器抓，
 因为 `gitee.com/explore/*` 有 Nox JS 挑战，普通 HTTP 一律 405）。
 

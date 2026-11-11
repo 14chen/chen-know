@@ -24,6 +24,16 @@ public class WeeklyProperties {
     private int snapshotLookbackDays = 7;
     /** GitHub API 基址（给入选仓库补 pushed_at）；留空用默认 api.github.com。 */
     private String githubApiBase = "https://api.github.com";
+    /** 每条周报笔记是否附「傻瓜教程」（只摘 README 原文，不接模型）。 */
+    private boolean tutorialEnabled = true;
+    /** 教程正文行数上限（精简版：是什么/装什么/跑通第一例/3 个坑/去哪看文档）。 */
+    private int tutorialMaxLines = 160;
+    /** 单篇 README 最多取多少字符（超大 README 只留前段，避免笔记被撑爆）。 */
+    private int readmeMaxChars = 120_000;
+    /** 单次抓 README 的超时（秒）。 */
+    private int readmeTimeoutSeconds = 12;
+    /** 一轮周报抓 README 的总预算（秒），用完就降级为「只给地址」。 */
+    private int readmeBudgetSeconds = 45;
 
     public boolean isEnabled() {
         return enabled;
@@ -95,5 +105,45 @@ public class WeeklyProperties {
 
     public void setSnapshotLookbackDays(int snapshotLookbackDays) {
         this.snapshotLookbackDays = snapshotLookbackDays;
+    }
+
+    public boolean isTutorialEnabled() {
+        return tutorialEnabled;
+    }
+
+    public void setTutorialEnabled(boolean tutorialEnabled) {
+        this.tutorialEnabled = tutorialEnabled;
+    }
+
+    public int getTutorialMaxLines() {
+        return tutorialMaxLines <= 0 ? 160 : tutorialMaxLines;
+    }
+
+    public void setTutorialMaxLines(int tutorialMaxLines) {
+        this.tutorialMaxLines = tutorialMaxLines;
+    }
+
+    public int getReadmeMaxChars() {
+        return readmeMaxChars <= 0 ? 120_000 : readmeMaxChars;
+    }
+
+    public void setReadmeMaxChars(int readmeMaxChars) {
+        this.readmeMaxChars = readmeMaxChars;
+    }
+
+    public int getReadmeTimeoutSeconds() {
+        return readmeTimeoutSeconds <= 0 ? 12 : readmeTimeoutSeconds;
+    }
+
+    public void setReadmeTimeoutSeconds(int readmeTimeoutSeconds) {
+        this.readmeTimeoutSeconds = readmeTimeoutSeconds;
+    }
+
+    public int getReadmeBudgetSeconds() {
+        return readmeBudgetSeconds <= 0 ? 45 : readmeBudgetSeconds;
+    }
+
+    public void setReadmeBudgetSeconds(int readmeBudgetSeconds) {
+        this.readmeBudgetSeconds = readmeBudgetSeconds;
     }
 }
