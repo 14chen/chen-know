@@ -112,7 +112,7 @@ public final class WeeklyNoteContent {
             text = "本周新增 " + format(repo.weeklyStars()) + " 颗星，位列 " + repo.sourceLabel()
                     + " 周榜第 " + rank + (language.isEmpty() ? "。" : "；" + language + " 技术栈，评估成本低。");
         } else {
-            text = "首次收录，" + repo.sourceLabel() + " 推荐榜第 " + rank + "，下周起显示真实周增。";
+            text = "首次收录，" + repo.sourceLabel() + " 榜第 " + rank + " 位，下周起显示真实周增。";
         }
         return truncate(text, REASON_LIMIT);
     }

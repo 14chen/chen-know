@@ -52,7 +52,7 @@ class WeeklyNoteContentTest {
         assertFalse(markdown.contains("适用人群"), "语言未知就不输出适用人群: " + markdown);
         assertFalse(markdown.contains("未知"), markdown);
         assertFalse(markdown.contains("null"), markdown);
-        assertTrue(markdown.contains("**推荐理由**：首次收录，Gitee 推荐榜第 1，下周起显示真实周增。"), markdown);
+        assertTrue(markdown.contains("**推荐理由**：首次收录，Gitee 榜第 1 位，下周起显示真实周增。"), markdown);
     }
 
     @Test
