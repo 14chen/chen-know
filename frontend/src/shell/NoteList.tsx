@@ -141,7 +141,11 @@ export function NoteList({
       <div className="kb-sidebar__section">
         <span>笔记</span>
         <span className="kb-sidebar__section-actions">
-          {!loading ? <span className="kb-sidebar__section-count">{items.length}</span> : null}
+          {!loading ? (
+            <span className="kb-sidebar__section-count">
+              {truncation ? truncation.total : items.length}
+            </span>
+          ) : null}
           <Button
             variant="icon"
             size="sm"

@@ -1130,15 +1130,21 @@ export function AppShell({ user, theme, onSelectTheme, onLoggedOut }: AppShellPr
   const visibleNotes = useMemo(() => {
     if (folderFilter === null) return items
     if (folderFilter === 0) return items.filter((item) => item.folderId === null)
-    return items.filter((item) => item.folderId === folderFilter)
-  }, [items, folderFilter])
+    // 选中目录时连子目录一起显示：树上的数字是子树合计，列表口径必须一致，
+    // 否则父目录会出现「数字 18、点进去空白」的矛盾。
+    const node = findFolder(tree.tree, folderFilter)
+    if (!node) return items.filter((item) => item.folderId === folderFilter)
+    const ids = new Set<number>([node.id, ...collectDescendantIds(node)])
+    return items.filter((item) => item.folderId !== null && ids.has(item.folderId))
+  }, [items, folderFilter, tree.tree])
 
   const folderCounts = useMemo(
     () => ({
-      all: items.length,
+      // 列表被全量拉取上限截断时，items 只是已加载的部分，总数要用服务端的 total
+      all: notes.listTruncated ? notes.listTotal : items.length,
       unclassified: items.filter((item) => item.folderId === null).length,
     }),
-    [items],
+    [items, notes.listTruncated, notes.listTotal],
   )
 
   const truncation = notes.listTruncated

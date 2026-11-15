@@ -17,6 +17,7 @@ import { Skeleton } from '@/components/Skeleton'
 import { TextField } from '@/components/TextField'
 import { FOLDER_DND_TYPE, NOTE_DND_TYPE, hasType, readDragId } from './dnd'
 import { IconMore } from './shellIcons'
+import { countSubtreeNotes } from './useTree'
 
 const EXPANDED_KEY = 'kb.tree.expanded'
 
@@ -297,7 +298,8 @@ export function FolderTree({
             </span>
           </button>
 
-          <span className="kb-tree-row__count">{node.noteCount}</span>
+          {/* 目录树显示整棵子树的笔记数：父目录自己没有直属笔记，显示 0 会让人以为空目录 */}
+          <span className="kb-tree-row__count">{countSubtreeNotes(node)}</span>
           <button
             type="button"
             className="kb-tree-row__more"

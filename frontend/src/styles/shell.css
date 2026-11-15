@@ -1185,6 +1185,12 @@
   .kb-search {
     width: 210px;
   }
+
+  /* 侧栏收到 240px 后 5 列每格只有 43px，「最近浏览」这类四字标签会截成「最近…」。
+     改成 4 列（每格 53px）后全部标签完整；条目数不变，只是换行位置变化。 */
+  .kb-nav {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 /* ==========================================================================
@@ -1308,10 +1314,12 @@
   }
 
   .kb-tree-row {
-    padding-right: 52px;
+    /* 触摸设备没有 hover：计数常驻在 right:50px，与 44px 的「⋯」并排。
+       右侧只保留「计数 + 间距」这 72px，再多会白白吃掉目录名（240px 抽屉里
+       5 个字的目录名就会被截成「AI时…」）。 */
+    padding-right: 72px;
   }
 
-  /* 触摸设备没有 hover：计数让位给常驻的「⋯」 */
   .kb-tree-row__more {
     opacity: 1;
     pointer-events: auto;
@@ -1321,7 +1329,8 @@
   }
 
   .kb-tree-row__count {
-    opacity: 0;
+    opacity: 1;
+    right: 50px;
   }
 
   /* 触摸设备不能依赖 hover：列表项操作常驻可见，且 ≥44×44 */
