@@ -1,0 +1,1 @@
+import{w as e}from"./index-BejGUNHX.js";function t(t,n){return e(`/api/${t}/run?async=true`,{method:`POST`,signal:n})}function n(t,n,r){return e(`/api/runs/${t}/${n}/progress`,{signal:r})}function r(t,n){return e(`/api/runs/${t}/${n}/cancel`,{method:`POST`})}function i(e){return e===`done`||e===`failed`||e===`cancelled`}export{t as i,n,i as r,r as t};
