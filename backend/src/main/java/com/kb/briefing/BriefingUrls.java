@@ -10,6 +10,13 @@ import java.util.Locale;
  */
 public final class BriefingUrls {
 
+    /** 生产默认开启 DNS 解析校验；测试环境假域名会被沙箱 DNS 解析到回环，由配置关闭。 */
+    private static volatile boolean dnsCheckEnabled = true;
+
+    public static void setDnsCheckEnabled(boolean enabled) {
+        dnsCheckEnabled = enabled;
+    }
+
     private BriefingUrls() {
     }
 
@@ -43,7 +50,18 @@ public final class BriefingUrls {
         if (parts.length < 2) {
             return false;                       // 单段主机名（内网短名）
         }
+        // 八进制/十六进制风格的 IP 写法：即使不在标准点分十进制长度内也直接拒绝
+        for (String part : parts) {
+            String lower = part.toLowerCase(Locale.ROOT);
+            if (lower.startsWith("0x")) return false;
+            if (part.length() > 1 && part.startsWith("0")
+                    && part.chars().allMatch(Character::isDigit)) return false;
+        }
         if (parts.length == 4 && isAllDigits(parts)) {
+            // 0177.0.0.1 这类八进制写法会被 InetAddress 当主机名，必须在这里就拒绝
+            for (String part : parts) {
+                if (part.length() > 1 && part.startsWith("0")) return false;
+            }
             int a = Integer.parseInt(parts[0]);
             int b = Integer.parseInt(parts[1]);
             if (a == 0 || a == 10 || a == 127 || a >= 224) {
@@ -61,6 +79,30 @@ public final class BriefingUrls {
             if (a == 100 && b >= 64 && b <= 127) {
                 return false;                   // CGNAT
             }
+        }
+        // 字符串判断挡不住 0177.0.0.1 / 0x7f000001 这类写法，也不挡 DNS 指向内网的域名。
+        // 解析实际地址再判一次（hostname 与字面量都覆盖）。
+        if (!dnsCheckEnabled) return true;
+        try {
+            for (java.net.InetAddress address : java.net.InetAddress.getAllByName(name)) {
+                if (!isPublicAddress(address)) return false;
+            }
+        } catch (java.net.UnknownHostException e) {
+            // DNS 不可用时回退到字符串判断：无法解析的主机本来就连不上；
+            // 0177.0.0.1 / 0x7f000001 这类写法由 InetAddress 本地解析，不依赖 DNS。
+            return true;
+        }
+        return true;
+    }
+
+    private static boolean isPublicAddress(java.net.InetAddress address) {
+        if (address.isLoopbackAddress() || address.isSiteLocalAddress() || address.isLinkLocalAddress()
+                || address.isAnyLocalAddress() || address.isMulticastAddress()) return false;
+        byte[] bytes = address.getAddress();
+        if (bytes.length == 4) {
+            int a = bytes[0] & 0xFF;
+            int b = bytes[1] & 0xFF;
+            if (a == 0 || a >= 224 || (a == 100 && b >= 64 && b <= 127)) return false;
         }
         return true;
     }

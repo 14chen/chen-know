@@ -137,6 +137,8 @@ public final class MiniJson {
 
         private final String text;
         private int pos;
+        private int depth;
+        private static final int MAX_DEPTH = 64;
 
         Parser(String text) {
             this.text = text;
@@ -153,30 +155,37 @@ public final class MiniJson {
         }
 
         Object value() {
-            skipWhitespace();
-            if (atEnd()) {
-                throw new IllegalArgumentException("JSON 意外结束");
+            if (++depth > MAX_DEPTH) {
+                throw new IllegalArgumentException("JSON 嵌套过深（上限 " + MAX_DEPTH + "）");
             }
-            char c = text.charAt(pos);
-            if (c == OPEN_BRACE) {
-                return object();
+            try {
+                skipWhitespace();
+                if (atEnd()) {
+                    throw new IllegalArgumentException("JSON 意外结束");
+                }
+                char c = text.charAt(pos);
+                if (c == OPEN_BRACE) {
+                    return object();
+                }
+                if (c == OPEN_BRACKET) {
+                    return array();
+                }
+                if (c == QUOTE) {
+                    return string();
+                }
+                if (c == 't') {
+                    return literal("true", Boolean.TRUE);
+                }
+                if (c == 'f') {
+                    return literal("false", Boolean.FALSE);
+                }
+                if (c == 'n') {
+                    return literal("null", null);
+                }
+                return number();
+            } finally {
+                depth--;
             }
-            if (c == OPEN_BRACKET) {
-                return array();
-            }
-            if (c == QUOTE) {
-                return string();
-            }
-            if (c == 't') {
-                return literal("true", Boolean.TRUE);
-            }
-            if (c == 'f') {
-                return literal("false", Boolean.FALSE);
-            }
-            if (c == 'n') {
-                return literal("null", null);
-            }
-            return number();
         }
 
         private Map<String, Object> object() {
@@ -258,8 +267,19 @@ public final class MiniJson {
                     if (pos + 4 > text.length()) {
                         throw new IllegalArgumentException("JSON 非法 unicode 转义");
                     }
-                    out.append((char) Integer.parseInt(text.substring(pos, pos + 4), 16));
+                    int code = Integer.parseInt(text.substring(pos, pos + 4), 16);
                     pos += 4;
+                    // UTF-16 代理对：emoji/罕用字必须合并成一个码点，否则会输出两个乱码字符
+                    if (code >= 0xD800 && code <= 0xDBFF && pos + 6 <= text.length()
+                            && text.charAt(pos) == '\\' && text.charAt(pos + 1) == 'u') {
+                        int low = Integer.parseInt(text.substring(pos + 2, pos + 6), 16);
+                        if (low >= 0xDC00 && low <= 0xDFFF) {
+                            out.appendCodePoint(Character.toCodePoint((char) code, (char) low));
+                            pos += 6;
+                            continue;
+                        }
+                    }
+                    out.append((char) code);
                 } else {
                     throw new IllegalArgumentException("JSON 非法转义");
                 }

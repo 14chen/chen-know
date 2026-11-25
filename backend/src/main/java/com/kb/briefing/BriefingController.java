@@ -2,6 +2,7 @@ package com.kb.briefing;
 
 import com.kb.user.KbPrincipal;
 import java.util.List;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -27,9 +28,18 @@ public class BriefingController {
         this.properties = properties;
     }
 
+    /** 同步模式仍是默认；?async=true 立即返回 202 + runId，进度走 /api/runs/{module}/{id}/progress。 */
     @PostMapping("/run")
-    public BriefingRunResponse run(@AuthenticationPrincipal KbPrincipal principal) {
-        return briefingService.run(principal.id(), principal.spaceId());
+    public ResponseEntity<?> run(@AuthenticationPrincipal KbPrincipal principal,
+            @RequestParam(name = "async", required = false) Boolean async) {
+        if (Boolean.TRUE.equals(async)) {
+            long runId = briefingService.runAsync(principal.id(), principal.spaceId(), "manual-async");
+            return ResponseEntity.accepted().body(new AsyncResponse(runId, "running"));
+        }
+        return ResponseEntity.ok(briefingService.run(principal.id(), principal.spaceId()));
+    }
+
+    public record AsyncResponse(long runId, String status) {
     }
 
     @GetMapping("/runs")

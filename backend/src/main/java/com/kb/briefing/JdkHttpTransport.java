@@ -361,6 +361,10 @@ public class JdkHttpTransport implements HttpTransport {
                     throw new BriefingFetchException("重定向次数超过 " + MAX_REDIRECTS);
                 }
                 current = URI.create(current).resolve(location.trim()).toString();
+                // 每一跳都重新做 SSRF 校验：公网地址可能重定向到内网
+                if (!BriefingUrls.isPublicHttpUrl(current)) {
+                    throw new BriefingFetchException("重定向目标被 SSRF 规则拒绝：" + current);
+                }
                 continue;
             }
             byte[] body = decompress(response, current);

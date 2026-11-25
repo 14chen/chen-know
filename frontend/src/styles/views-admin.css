@@ -1099,6 +1099,19 @@
   overflow-wrap: anywhere;
 }
 
+.vw-brief__progress-track {
+  height: 6px;
+  margin: var(--sp-2) 0;
+  border-radius: var(--r-full);
+  background: var(--bg-muted);
+  overflow: hidden;
+}
+.vw-brief__progress-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 200ms ease;
+}
+
 .vw-brief__result {
   display: flex;
   flex-wrap: wrap;
@@ -1140,6 +1153,9 @@
 }
 
 .vw-brief__card {
+  /* 父容器是定高的 flex 列；不写 flex:none 的话卡片会被压扁，
+     再叠上 overflow:hidden 就会把表格后半截 rows 直接裁掉（390px 实测）。 */
+  flex: none;
   min-width: 0;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1177,17 +1193,89 @@
   gap: var(--sp-2);
 }
 
-/* 表格自己横向滚动，页面不溢出 */
+/* 表格自己横向滚动，页面不溢出；窄容器直接改成堆叠卡片，不让第 4 列被裁掉 */
 .vw-brief__tablewrap {
   max-width: 100%;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
+  container-type: inline-size;
+}
+
+.vw-brief__tablewrap:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
+/* caption 给读屏器提供表名，但视觉上不再重复一遍卡片标题 */
+.vw-brief__caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
 }
 
 .vw-brief__table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: var(--fs-sm);
+}
+
+/* 表头/行头 sticky：横向或纵向滚动时始终知道这一格是什么 */
+.vw-brief__table thead th {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 2;
+}
+
+.vw-brief__table tbody th {
+  position: sticky;
+  inset-inline-start: 0;
+  z-index: 1;
+  background: var(--surface);
+}
+
+.vw-brief__table--sources {
+  --label-1: '源';
+  --label-2: '类型';
+  --label-3: '链接';
+  --label-4: '最近一次';
+}
+
+.vw-brief__table--runs {
+  --label-1: '时间';
+  --label-2: '状态';
+  --label-3: '新内容';
+  --label-4: '检查';
+  --label-5: '笔记';
+}
+
+.vw-brief__skipped {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  color: var(--warning);
+}
+
+.vw-brief__fail {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+/* 失败原因必须肉眼可见，不能只放在 title 属性里 */
+.vw-brief__fail-reason {
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .vw-brief__table th,
@@ -1251,6 +1339,55 @@
   .vw-brief__cell-url { max-width: 210px; }
 }
 
+/* 窄容器（手机 / 侧栏里的小卡片）：表格改成一张张卡片，每格前面补上列名。
+   用 @container 而不是 @media —— 表格自己变窄时就该reflow，不必等整个视口变窄。 */
+@container (max-width: 640px) {
+  .vw-brief__tablewrap { overflow-x: visible; }
+
+  .vw-brief__table,
+  .vw-brief__table tbody,
+  .vw-brief__table tr,
+  .vw-brief__table th,
+  .vw-brief__table td {
+    display: block;
+    width: 100%;
+  }
+
+  .vw-brief__table thead { display: none; }
+
+  .vw-brief__table tbody tr {
+    margin-block-end: var(--sp-3);
+    padding: var(--sp-2) 0;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: var(--surface);
+  }
+
+  .vw-brief__table tbody th,
+  .vw-brief__table tbody td {
+    position: static;
+    border-bottom: 0;
+    white-space: normal;
+    padding-block: var(--sp-1);
+    padding-inline: var(--sp-3);
+  }
+
+  .vw-brief__table tbody td::before {
+    content: var(--label) ': ';
+    color: var(--text-muted);
+    font-size: var(--fs-xs);
+  }
+
+  .vw-brief__table tbody td:nth-child(2) { --label: var(--label-2); }
+  .vw-brief__table tbody td:nth-child(3) { --label: var(--label-3); }
+  .vw-brief__table tbody td:nth-child(4) { --label: var(--label-4); }
+  .vw-brief__table tbody td:nth-child(5) { --label: var(--label-5); }
+
+  .vw-brief__cell-url { max-width: none; }
+  .vw-brief__link { white-space: normal; overflow-wrap: anywhere; }
+  .vw-brief__cell-num { text-align: left; }
+}
+
 /* 触摸设备：可点区域 ≥44px */
 @media (pointer: coarse) {
   .vw-brief .kb-btn {
@@ -1267,6 +1404,124 @@
 
 @media (prefers-reduced-motion: reduce) {
   .vw-brief__link { transition: none; }
+}
+
+/* ---- P1 条目面板：今日必读 / 主题筛选 / 详情抽屉 ---- */
+.vw-brief__pick {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+}
+
+.vw-brief__pick-card {
+  display: flex;
+  align-items: stretch;
+  gap: var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--bg-subtle);
+  padding: var(--sp-2);
+}
+
+.vw-brief__pick-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-1);
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.vw-brief__pick-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+.vw-brief__pick-title { font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.vw-brief__pick-why { font-size: var(--fs-xs); color: var(--text-secondary); overflow-wrap: anywhere; }
+.vw-brief__pick-points { font-size: var(--fs-xs); color: var(--text-muted); overflow-wrap: anywhere; }
+.vw-brief__pick-actions { display: flex; flex: none; flex-direction: column; gap: var(--sp-1); }
+
+.vw-brief__fb {
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--fs-xs);
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.vw-brief__fb.is-on { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+
+.vw-brief__filters { display: flex; align-items: center; gap: var(--sp-2); }
+.vw-brief__search input {
+  width: 220px;
+  max-width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-sm);
+}
+.vw-brief__themes { display: flex; flex-wrap: wrap; gap: var(--sp-2); padding: 0 var(--sp-4) var(--sp-2); }
+.vw-brief__themes button {
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--fs-xs);
+  padding: 4px 12px;
+  cursor: pointer;
+}
+.vw-brief__themes button.is-active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.vw-brief__pager { display: flex; align-items: center; justify-content: center; gap: var(--sp-3); padding: var(--sp-3); }
+
+.vw-brief__drawer {
+  /* 原生 <dialog>：重置 UA 的默认居中/尺寸限制，靠 showModal() 获得模态与 Escape */
+  position: fixed;
+  inset: 0 0 0 auto;
+  margin: 0;
+  border: 0;
+  padding: var(--sp-4);
+  width: min(440px, 92vw);
+  max-width: none;
+  max-height: none;
+  height: 100%;
+  overflow-y: auto;
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+.vw-brief__drawer::backdrop { background: rgb(0 0 0 / 32%); }
+.vw-brief__drawer-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-2); }
+.vw-brief__drawer h3 { font-size: var(--fs-md); line-height: var(--lh-tight); overflow-wrap: anywhere; }
+.vw-brief__drawer h4 { margin: var(--sp-3) 0 var(--sp-1); font-size: var(--fs-sm); }
+.vw-brief__quote {
+  margin: var(--sp-3) 0;
+  padding: var(--sp-2) var(--sp-3);
+  border-left: 3px solid var(--accent, var(--primary, #6b7cff));
+  background: var(--surface-subtle, var(--surface));
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+.vw-brief__drawer-fb { display: flex; gap: var(--sp-2); margin-top: var(--sp-4); }
+
+@media (max-width: 767px) {
+  .vw-brief__search input { width: 100%; }
+  .vw-brief__filters { width: 100%; }
+  .vw-brief__fb { min-height: 44px; }
 }
 
 /* ------------------------------------------------------------ 附件体检 */

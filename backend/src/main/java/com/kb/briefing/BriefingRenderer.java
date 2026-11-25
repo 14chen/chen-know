@@ -155,7 +155,11 @@ public final class BriefingRenderer {
             out.append("\n原题：").append(safe(item.originalTitle())).append('\n');
         }
         if (item.url() != null && !item.url().isBlank()) {
-            out.append("\n链接：").append(item.url().trim()).append('\n');
+            // 外部 URL 一律视为不可信：包在 < > 里并剥掉尖括号/控制字符，避免注入额外 Markdown/HTML
+            String safeUrl = item.url().trim()
+                    .replace("<", "").replace(">", "")
+                    .replaceAll("[\\x00-\\x1F\\x7F]", "");
+            out.append("\n链接：<").append(safeUrl).append(">\n");
         }
         if (item.imageRef() != null && !item.imageRef().isBlank()) {
             out.append("\n![](").append(item.imageRef()).append(")\n");

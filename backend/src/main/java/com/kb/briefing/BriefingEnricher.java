@@ -88,15 +88,22 @@ public class BriefingEnricher {
     /**
      * @param displayTitle 展示标题（有译文时是中文；null 表示沿用原标题）
      * @param displaySummary 展示摘要（与标题同语言；null 表示沿用 RSS 摘要）
+     * @param imageRemote 配图远程地址（{@link #NO_IMAGE_MARKER} 表示看过但没有图）
      * @param imageRef 形如 {@code /api/attachments/12}
      * @param attachmentId 附件 id（用于把 note_id 回填到简报笔记上）
+     * @param translationFailed 本轮翻译是否失败（true 时刻意不写译文，下次运行重试）
      */
-    public record Enrichment(String displayTitle, String displaySummary, String imageRef, Long attachmentId) {
+    public record Enrichment(String displayTitle, String displaySummary, String imageRemote, String imageRef,
+            Long attachmentId, boolean translationFailed) {
 
-        static final Enrichment EMPTY = new Enrichment(null, null, null, null);
+        static final Enrichment EMPTY = new Enrichment(null, null, null, null, null, false);
 
-        Enrichment withImage(String ref, Long id) {
-            return new Enrichment(displayTitle, displaySummary, ref, id);
+        Enrichment withTranslations(String title, String summary, boolean failed) {
+            return new Enrichment(title, summary, imageRemote, imageRef, attachmentId, failed);
+        }
+
+        Enrichment withPage(String remote, String ref, Long id, String summary) {
+            return new Enrichment(displayTitle, summary, remote, ref, id, translationFailed);
         }
     }
 
@@ -106,9 +113,11 @@ public class BriefingEnricher {
             return results;
         }
         long started = System.currentTimeMillis();
+        String cutoff = Times.format(Instant.now(clock).minus(Duration.ofDays(properties.getCacheTtlDays())));
         Map<String, BriefingCache.Entry> cached = new ConcurrentHashMap<>();
         for (Target target : targets) {
-            cache.find(principal.spaceId(), target.url()).ifPresent(entry -> cached.put(target.url(), entry));
+            cache.find(principal.spaceId(), target.url(), cutoff)
+                    .ifPresent(entry -> cached.put(target.url(), entry));
         }
 
         // ---- 阶段一：翻译（全部条目，独立预算）----
@@ -117,7 +126,7 @@ public class BriefingEnricher {
         translatePhase(targets, results, cached, translated, failedTranslations);
         if (failedTranslations.get() > 0) {
             log.warn("翻译不可用：本次 {} 处翻译失败，已保留原文（不会中英混搭）。"
-                    + "MyMemory 免费配额按 IP 每天限流，额度恢复后下次运行会补齐并写入缓存。",
+                    + "失败条目不会写入译文缓存，额度恢复后下次运行会重试。",
                     failedTranslations.get());
         }
 
@@ -127,9 +136,26 @@ public class BriefingEnricher {
         Set<String> usedSha = ConcurrentHashMap.newKeySet();
         runPhase(targets, PAGE_BUDGET, target -> {
             Enrichment base = results.getOrDefault(target.url(), Enrichment.EMPTY);
-            results.put(target.url(), enrichWithPage(principal, target, base, cached.get(target.url()),
+            results.put(target.url(), enrichWithPage(principal, target, base,
                     pages, images, usedSha));
         });
+
+        // ---- 统一回写缓存：两个阶段无论走哪条提前返回路径都已经合并成最终结果 ----
+        String now = Times.format(Instant.now(clock));
+        for (Target target : targets) {
+            Enrichment finalResult = results.get(target.url());
+            if (finalResult == null) {
+                continue;
+            }
+            BriefingCache.Entry previous = cached.get(target.url());
+            String remote = finalResult.imageRemote() != null
+                    ? finalResult.imageRemote()
+                    : (previous == null ? null : previous.imageUrl());
+            cache.save(principal.spaceId(), target.url(),
+                    new BriefingCache.Entry(finalResult.displayTitle(), finalResult.displaySummary(), remote,
+                            finalResult.attachmentId(), finalResult.translationFailed()),
+                    now);
+        }
 
         int untranslated = (int) results.values().stream()
                 .filter(enrichment -> enrichment.displayTitle() == null).count();
@@ -194,12 +220,16 @@ public class BriefingEnricher {
         List<PairTask> tasks = new ArrayList<>();
         for (Target target : targets) {
             BriefingCache.Entry entry = cached.get(target.url());
-            if (entry != null && (entry.titleZh() != null || entry.summaryZh() != null)) {
-                results.put(target.url(), new Enrichment(entry.titleZh(), entry.summaryZh(),
-                        imageRef(entry.attachmentId()), entry.attachmentId()));
+            // 缓存里已有的图片信息要带上，阶段二才不会把「已看过、没有图」的页面重抓一遍
+            Enrichment base = entry == null ? Enrichment.EMPTY
+                    : new Enrichment(entry.titleZh(), entry.summaryZh(), entry.imageUrl(),
+                            imageRef(entry.attachmentId()), entry.attachmentId(), entry.translationFailed());
+            results.put(target.url(), base);
+            // 真正命中译文：跳过翻译。translation_failed=1 只算「页/图缓存」，翻译仍要重试
+            if (entry != null && !entry.translationFailed()
+                    && (entry.titleZh() != null || entry.summaryZh() != null)) {
                 continue;
             }
-            results.put(target.url(), Enrichment.EMPTY);
             if (!properties.isTranslate()) {
                 continue;
             }
@@ -208,7 +238,7 @@ public class BriefingEnricher {
                     && !BriefingText.looksChinese(target.title());
             boolean summaryNeeds = !summary.isBlank() && !BriefingText.looksChinese(summary);
             if (!titleNeeds && !summaryNeeds) {
-                continue;                                  // 本来就全中文
+                continue;                                  // 本来就全中文，不需要翻译
             }
             tasks.add(new PairTask(target, summary, titleNeeds, summaryNeeds));
         }
@@ -230,12 +260,18 @@ public class BriefingEnricher {
         } catch (RuntimeException e) {
             log.warn("批量翻译失败（{}），本次全部保留原文", e.getMessage());
             failedTranslations.addAndGet(tasks.size());
+            for (PairTask task : tasks) {
+                markTranslationFailed(results, task.target().url());
+            }
             return;
         }
         if (translations == null || translations.size() != texts.size()) {
             log.warn("翻译返回条数与请求不一致（{} / {}），本次全部保留原文",
                     translations == null ? "null" : translations.size(), texts.size());
             failedTranslations.addAndGet(tasks.size());
+            for (PairTask task : tasks) {
+                markTranslationFailed(results, task.target().url());
+            }
             return;
         }
         int cursor = 0;
@@ -244,22 +280,30 @@ public class BriefingEnricher {
             String summaryZh = task.summaryNeeds() ? translations.get(cursor++) : null;
             if ((task.titleNeeds() && isBlank(titleZh)) || (task.summaryNeeds() && isBlank(summaryZh))) {
                 failedTranslations.incrementAndGet();
-                continue;                                  // 成对失败 → 保持原文
+                markTranslationFailed(results, task.target().url());   // 成对失败 → 保持原文，下次重试
+                continue;
             }
             translated.incrementAndGet();
-            results.put(task.target().url(), new Enrichment(titleZh, summaryZh, null, null));
+            Enrichment base = results.getOrDefault(task.target().url(), Enrichment.EMPTY);
+            results.put(task.target().url(), base.withTranslations(titleZh, summaryZh, false));
         }
+    }
+
+    /** 只把「失败待重试」这个标记写进结果，不写译文；统一回写时落到 translation_failed 列。 */
+    private static void markTranslationFailed(Map<String, Enrichment> results, String url) {
+        Enrichment current = results.getOrDefault(url, Enrichment.EMPTY);
+        results.put(url, current.withTranslations(null, null, true));
     }
 
     private static boolean isBlank(String text) {
         return text == null || text.isBlank();
     }
 
-    /** 阶段二：文章页补摘要 + 配图（都不强制）。 */
+    /** 阶段二：文章页补摘要 + 配图（都不强制）。缓存统一在 enrichAll 末尾回写，这里只合并结果。 */
     private Enrichment enrichWithPage(KbPrincipal principal, Target target, Enrichment base,
-            BriefingCache.Entry cached, AtomicInteger pages, AtomicInteger images, Set<String> usedSha) {
-        if (cached != null && cached.imageUrl() != null) {
-            return base.withImage(imageRef(cached.attachmentId()), cached.attachmentId());   // 页看过了
+            AtomicInteger pages, AtomicInteger images, Set<String> usedSha) {
+        if (base.imageRemote() != null) {
+            return base;   // 页看过了（含「看过但没有图」的空串哨兵）
         }
         if (!properties.isFetchArticle() || !BriefingUrls.isPublicHttpUrl(target.url())) {
             return base;
@@ -296,11 +340,8 @@ public class BriefingEnricher {
         if (remote != null) {
             attachmentId = downloadImage(principal, target, remote, images, usedSha);
         }
-        cache.save(principal.spaceId(), target.url(),
-                new BriefingCache.Entry(base.displayTitle(), displaySummary,
-                        remote == null ? NO_IMAGE_MARKER : remote, attachmentId),
-                Times.format(Instant.now(clock)));
-        return new Enrichment(base.displayTitle(), displaySummary, imageRef(attachmentId), attachmentId);
+        return base.withPage(remote == null ? NO_IMAGE_MARKER : remote, imageRef(attachmentId), attachmentId,
+                displaySummary);
     }
 
     private static String imageRef(Long attachmentId) {

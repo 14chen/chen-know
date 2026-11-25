@@ -90,6 +90,18 @@ public class BriefingRepository {
                 "SELECT url FROM briefing_seen WHERE space_id = ?", String.class, spaceId));
     }
 
+    /** 长期未刷新的缓存行滚动清理（保留期由 kb.briefing.cache-retention-days 控制）。 */
+    public int purgeExpiredCache(long spaceId, String beforeIso) {
+        return jdbc.update("DELETE FROM briefing_cache WHERE space_id = ?"
+                + " AND COALESCE(updated_at, created_at) < ?", spaceId, beforeIso);
+    }
+
+    /** 去重台账只保留最近一段时间，避免无限增长（保留期由 kb.briefing.seen-retention-days 控制）。 */
+    public int purgeOldSeen(long spaceId, String beforeIso) {
+        return jdbc.update("DELETE FROM briefing_seen WHERE space_id = ? AND first_seen_at < ?",
+                spaceId, beforeIso);
+    }
+
     /** 只有真正写进简报的 url 才记入 seen（BRIEFING.md §3 第 4 条）。 */
     public int markSeen(long spaceId, Collection<String> urls, String now) {
         if (urls.isEmpty()) {

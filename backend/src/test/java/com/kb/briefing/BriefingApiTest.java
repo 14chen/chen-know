@@ -70,6 +70,8 @@ class BriefingApiTest {
         registry.add("kb.briefing.folder", () -> "简报归档");
         registry.add("kb.briefing.tags", () -> "AI简报,每日");
         registry.add("kb.briefing.per-source", () -> "3");
+        // 本用例的假数据刻意让各源标题重复；关闭跨源语义去重以保持既有断言口径
+        registry.add("kb.briefing.semantic-dedupe", () -> "false");
         registry.add("kb.briefing.translate", () -> "true");
         registry.add("kb.briefing.fetch-article", () -> "true");
         registry.add("kb.briefing.max-images", () -> "2");
@@ -179,7 +181,7 @@ class BriefingApiTest {
         String markdown = jdbc.queryForObject("SELECT content FROM notes WHERE id = ?", String.class, noteId);
         assertTrue(markdown.startsWith("# AI 简报 2026-10-18"), markdown);
         assertTrue(markdown.contains("## 国外 · 一手") && markdown.contains("### OpenAI"), markdown);
-        assertTrue(markdown.contains("链接：https://openai.com/news/1"), "每条都要有原始链接: " + markdown);
+        assertTrue(markdown.contains("链接：<https://openai.com/news/1>"), "每条都要有原始链接: " + markdown);
         assertTrue(markdown.contains("#### 1. "), "每条标题单独成行: " + markdown);
         assertTrue(markdown.contains("· 128 分"), "HN 要带分数: " + markdown);
         assertFalse(markdown.contains("<p>") || markdown.contains("<b>") || markdown.contains("<a "),
@@ -262,7 +264,7 @@ class BriefingApiTest {
         String markdown = jdbc.queryForObject("SELECT content FROM notes WHERE id = ?", String.class, noteId);
         assertTrue(markdown.contains("### 本次未取到"), markdown);
         assertTrue(markdown.contains("- Anthropic：HTTP 403（fake）"), markdown);
-        assertTrue(markdown.contains("链接：https://openai.com/news/1"), "其余源照常: " + markdown);
+        assertTrue(markdown.contains("链接：<https://openai.com/news/1>"), "其余源照常: " + markdown);
     }
 
     @Test
@@ -416,6 +418,126 @@ class BriefingApiTest {
         MvcResult download = mockMvc.perform(get("/api/attachments/" + attachmentId).session(session))
                 .andExpect(status().isOk()).andReturn();
         assertTrue(download.getResponse().getContentAsByteArray().length > 0, "图片应有字节");
+    }
+
+    @Test
+    @DisplayName("质量闸门：生成后评分落表，低分条目仍保留在正文（降级不丢弃）")
+    void qualityGateScoresWithoutDroppingItems() throws Exception {
+        resetSeen();
+        jdbc.update("DELETE FROM content_quality WHERE space_id = ?", spaceId);
+        MvcResult result = mockMvc.perform(post("/api/briefing/run").session(session))
+                .andExpect(status().isOk())
+                .andReturn();
+        long noteId = Long.parseLong(result.getResponse().getContentAsString(StandardCharsets.UTF_8)
+                .replaceAll(".*\"noteId\":(\\d+).*", "$1"));
+        String markdown = jdbc.queryForObject("SELECT content FROM notes WHERE id = ?", String.class, noteId);
+
+        Integer scored = jdbc.queryForObject("SELECT COUNT(*) FROM content_quality WHERE space_id = ?",
+                Integer.class, spaceId);
+        assertTrue(scored != null && scored >= 15, "每条入选内容都应有质量评分: " + scored);
+
+        // 降级保留：原来 15 条仍全部出现在正文里，没有因为低分被删掉
+        long headings = markdown.lines().filter(line -> line.startsWith("#### ")).count();
+        assertEquals(15L, headings, "低分条目必须仍在正文: " + markdown);
+    }
+
+    @Test
+    @DisplayName("条目明细：生成后写 briefing_items；明细/分页/反馈 API 可用且反馈幂等")
+    void itemDetailsApiWorks() throws Exception {
+        resetSeen();
+        jdbc.update("DELETE FROM briefing_items WHERE space_id = ?", spaceId);
+        String body = mockMvc.perform(post("/api/briefing/run").session(session))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        long runId = Long.parseLong(body.replaceAll(".*\"runId\":(\\d+).*", "$1"));
+
+        mockMvc.perform(get("/api/briefing/items").param("runId", String.valueOf(runId)).session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(15))
+                .andExpect(jsonPath("$.items[0].qualityScore").exists())
+                .andExpect(jsonPath("$.items[0].theme").exists());
+        mockMvc.perform(get("/api/briefing/runs/" + runId).session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(15));
+        mockMvc.perform(get("/api/briefing/runs/99999999").session(session))
+                .andExpect(status().isNotFound());
+
+        String url = "https://openai.com/news/1";
+        mockMvc.perform(post("/api/briefing/items/feedback").session(session)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"url\":\"" + url + "\",\"feedback\":\"useful\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.ok").value(true));
+        mockMvc.perform(post("/api/briefing/items/feedback").session(session)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"url\":\"" + url + "\",\"feedback\":\"not_interesting\"}"))
+                .andExpect(status().isOk());
+        Integer rows = jdbc.queryForObject("SELECT COUNT(*) FROM briefing_feedback WHERE space_id = ? AND url = ?",
+                Integer.class, spaceId, url);
+        assertEquals(1, rows, "同用户同 URL 反馈必须幂等覆盖");
+        String feedback = jdbc.queryForObject("SELECT feedback FROM briefing_feedback WHERE space_id = ? AND url = ?",
+                String.class, spaceId, url);
+        assertEquals("not_interesting", feedback);
+    }
+
+    @Test
+    @DisplayName("真实互动量：HN points + 评论数算出热度，落 briefing_items 并经 API 暴露")
+    void engagementIsPersistedAndExposed() throws Exception {
+        resetSeen();
+        jdbc.update("DELETE FROM briefing_items WHERE space_id = ?", spaceId);
+        String body = mockMvc.perform(post("/api/briefing/run").session(session))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        long runId = Long.parseLong(body.replaceAll(".*\"runId\":(\\d+).*", "$1"));
+
+        // HN: 128 points + 36 comments*2 = 200
+        Integer engagement = jdbc.queryForObject(
+                "SELECT engagement FROM briefing_items WHERE space_id = ? AND url = ?",
+                Integer.class, spaceId, "https://example.com/hn-1");
+        assertEquals(200, engagement, "热度必须由真实 points/评论数算出");
+        assertEquals(2, jdbc.queryForObject(
+                "SELECT engagement_level FROM briefing_items WHERE space_id = ? AND url = ?",
+                Integer.class, spaceId, "https://example.com/hn-1"));
+
+        mockMvc.perform(get("/api/briefing/runs/" + runId).session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[?(@.source=='hackernews')].engagement").exists());
+    }
+
+    @Test
+    @DisplayName("HN 高赞原话落库并经 API 暴露（去标签，不写进 note 正文）")
+    void topCommentQuoteIsPersisted() throws Exception {
+        resetSeen();
+        jdbc.update("DELETE FROM briefing_items WHERE space_id = ?", spaceId);
+        String body = mockMvc.perform(post("/api/briefing/run").session(session))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        long runId = Long.parseLong(body.replaceAll(".*\"runId\":(\\d+).*", "$1"));
+        String quote = jdbc.queryForObject("SELECT top_quote FROM briefing_items WHERE space_id = ? AND url = ?",
+                String.class, spaceId, "https://example.com/hn-1");
+        assertEquals("这是社区高赞原话", quote);
+        mockMvc.perform(get("/api/briefing/runs/" + runId).session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[?(@.source=='hackernews')].topQuote").exists());
+    }
+
+    @Test
+    @DisplayName("跨源近重复聚簇：不再丢弃，合并印证数与来源链接（note 正文仍只有一条）")
+    void nearDuplicatesAreClusteredNotDropped() throws Exception {
+        resetSeen();
+        jdbc.update("DELETE FROM briefing_items WHERE space_id = ?", spaceId);
+        // 本测试类默认关了跨源去重（保持既有计数断言），这里临时打开再恢复
+        properties.setSemanticDedupe(true);
+        try {
+            mockMvc.perform(post("/api/briefing/run").session(session)).andExpect(status().isOk());
+
+            Integer merged = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM briefing_items WHERE space_id = ? AND corroboration_count > 1",
+                    Integer.class, spaceId);
+            assertTrue(merged != null && merged >= 1, "相同标题的跨源条目应聚成一簇: " + merged);
+            String links = jdbc.queryForObject(
+                    "SELECT source_links FROM briefing_items WHERE space_id = ? AND corroboration_count > 1 LIMIT 1",
+                    String.class, spaceId);
+            assertTrue(links != null && links.contains("deepmind"), "应保留被发现来源的链接: " + links);
+        } finally {
+            properties.setSemanticDedupe(false);
+        }
     }
 
     @Test
@@ -601,8 +723,15 @@ class BriefingApiTest {
         TRANSPORT.bodies.put(BriefingSources.byId("hackernews").url(), """
                 {"hits":[
                   {"objectID":"1","title":"AI story","url":"https://example.com/hn-1","points":128,
-                   "created_at":"2026-10-18T01:00:00Z"},
+                   "num_comments":36,"created_at":"2026-10-18T01:00:00Z"},
                   {"objectID":"2","title":"Ask HN: AI","url":null,"points":7,"created_at":"2026-10-18T02:00:00Z"}
+                ]}
+                """);
+        // HN 高赞原话（原话是加分项，抓不到也不影响条目）
+        TRANSPORT.bodies.put("https://hn.algolia.com/api/v1/items/", """
+                {"id":1,"children":[
+                  {"author":"alice","points":127,"text":"<p>这是社区高赞原话</p>"},
+                  {"author":"bob","points":2,"text":"低赞评论"}
                 ]}
                 """);
     }

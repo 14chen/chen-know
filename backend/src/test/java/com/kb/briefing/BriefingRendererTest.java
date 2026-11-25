@@ -22,6 +22,18 @@ class BriefingRendererTest {
     }
 
     @Test
+    @DisplayName("外部 URL 被包在 < > 且剥掉尖括号/控制字符，不能注入 Markdown/HTML")
+    void escapesExternalUrl() {
+        String malicious = "https://openai.com/x<script>alert(1)</script>\n[click](http://evil)";
+        String markdown = BriefingRenderer.render(doc(List.of(
+                block("OpenAI", BriefingSources.CAT_LEAD, "openai",
+                        new BriefingRenderer.Item("标题", malicious, "摘要", null, null, null, null)))));
+        assertTrue(markdown.contains("链接：<https://openai.com/"), markdown);
+        assertTrue(!markdown.contains("<script>"), markdown);
+        assertTrue(!markdown.contains("\n[click]("), markdown);
+    }
+
+    @Test
     @DisplayName("五段式：标题行 / 元信息 / 一句话摘要 / 原题 / 链接 / 配图（配图在链接之后）")
     void rendersFivePartItem() {
         String markdown = BriefingRenderer.render(doc(List.of(
@@ -35,7 +47,7 @@ class BriefingRendererTest {
         assertTrue(markdown.contains("\n> OpenAI · 10-25 · ★★★\n"), markdown);
         assertTrue(markdown.contains("\n了解 OpenAI 如何通过多租户与全局缓存把读取提升 12 倍。\n"), markdown);
         assertTrue(markdown.contains("\n原题：Rapidly scaling online storage\n"), markdown);
-        assertTrue(markdown.contains("\n链接：https://openai.com/index/x\n"), markdown);
+        assertTrue(markdown.contains("\n链接：<https://openai.com/index/x>\n"), markdown);
         assertTrue(markdown.indexOf("链接：") < markdown.indexOf("![](/api/attachments/7)"),
                 "配图要在链接行之后: " + markdown);
         assertTrue(markdown.indexOf("#### 1.") < markdown.indexOf("> OpenAI ·")

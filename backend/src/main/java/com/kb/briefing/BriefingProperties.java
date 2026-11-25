@@ -43,6 +43,16 @@ public class BriefingProperties {
     private boolean fetchArticle = true;
     /** 单次运行最多下载几张配图。 */
     private int maxImages = 20;
+    /** 本地个性化：用全文检索找用户知识库里的相关笔记标题（纯本地，不外发）。 */
+    private boolean personalize = true;
+    /** 跨源语义去重：近重复条目直接丢弃。 */
+    private boolean semanticDedupe = true;
+    /** 缓存条目超过这个天数就视为过期，重新翻译/抓页。 */
+    private int cacheTtlDays = 30;
+    /** 长期未刷新的缓存行保留天数（大于 TTL，给偶发复现留余地）。 */
+    private int cacheRetentionDays = 90;
+    /** 跨天去重台账的保留天数。 */
+    private int seenRetentionDays = 180;
     private Integer hour;
     private Integer minute;
 
@@ -154,12 +164,52 @@ public class BriefingProperties {
         this.fetchArticle = fetchArticle;
     }
 
+    public boolean isPersonalize() {
+        return personalize;
+    }
+
+    public void setPersonalize(boolean personalize) {
+        this.personalize = personalize;
+    }
+
+    public boolean isSemanticDedupe() {
+        return semanticDedupe;
+    }
+
+    public void setSemanticDedupe(boolean semanticDedupe) {
+        this.semanticDedupe = semanticDedupe;
+    }
+
     public int getMaxImages() {
         return maxImages < 0 ? 0 : maxImages;
     }
 
     public void setMaxImages(int maxImages) {
         this.maxImages = maxImages;
+    }
+
+    public int getCacheTtlDays() {
+        return cacheTtlDays <= 0 ? 30 : cacheTtlDays;
+    }
+
+    public void setCacheTtlDays(int cacheTtlDays) {
+        this.cacheTtlDays = cacheTtlDays;
+    }
+
+    public int getCacheRetentionDays() {
+        return cacheRetentionDays <= 0 ? 90 : cacheRetentionDays;
+    }
+
+    public void setCacheRetentionDays(int cacheRetentionDays) {
+        this.cacheRetentionDays = cacheRetentionDays;
+    }
+
+    public int getSeenRetentionDays() {
+        return seenRetentionDays <= 0 ? 180 : seenRetentionDays;
+    }
+
+    public void setSeenRetentionDays(int seenRetentionDays) {
+        this.seenRetentionDays = seenRetentionDays;
     }
 
     public Integer getHour() {
