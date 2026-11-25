@@ -375,18 +375,21 @@ CREATE INDEX IF NOT EXISTS idx_weekly_runs_week ON weekly_runs(space_id, iso_wee
 
 ```sql
 CREATE TABLE IF NOT EXISTS briefing_cache (
-  space_id      INTEGER NOT NULL,
-  url           TEXT    NOT NULL,
-  title_zh      TEXT,
-  summary_zh    TEXT,
-  image_remote  TEXT,                         -- 原始远程图片地址
-  attachment_id INTEGER,                      -- 落到本地后的附件 id
-  created_at    TEXT    NOT NULL,
+  space_id          INTEGER NOT NULL,
+  url               TEXT    NOT NULL,
+  title_zh          TEXT,
+  summary_zh        TEXT,
+  image_remote      TEXT,                     -- 原始远程图片地址；空串 = 看过但没有图
+  attachment_id     INTEGER,                  -- 落到本地后的附件 id
+  created_at        TEXT    NOT NULL,
+  updated_at        TEXT,                     -- 最后刷新时间，TTL 以它为准（老库回退 created_at）
+  translation_failed INTEGER NOT NULL DEFAULT 0,  -- 1 = 上次翻译失败，译文不写缓存，下次重试
   PRIMARY KEY (space_id, url)
 );
 ```
 
 > ⚠️ `briefing_cache` 的 `attachment_id` **不是外键**（没有 `REFERENCES`），删附件不会级联清理缓存行；读缓存时要容忍 `attachment_id` 指向已删附件，回落为无图。
+> ⚠️ `translation_failed=1` 的条目只算「文章页/配图缓存」，翻译阶段不会命中它；成功后由统一回写点清掉标志。两列均由 `SchemaMigrator.ensureColumn` 幂等补到老库。
 
 ### 5.5 迁移后的表清单（实测，2026-10-28）
 
@@ -407,8 +410,10 @@ CREATE TABLE IF NOT EXISTS briefing_cache (
 |---|---|
 | `space_id` / `url` | 复合主键，按源的原文链接缓存 |
 | 译文 / 摘要 / 配图地址 | 命中即跳过翻译与文章页抓取 |
+| `updated_at` | TTL 截止点，超过 `kb.briefing.cache-ttl-days` 视为未命中 |
+| `translation_failed` | 1 = 只缓存了页面/配图，译文下次重试；成功后清 0 |
 
-**失败不写缓存** —— 额度恢复后能自动补齐。
+**失败不写缓存** —— 额度恢复后能自动补齐。另：缓存行与 `briefing_seen` 分别按 `cache-retention-days` / `seen-retention-days` 在每次 run 开始时滚动清理，避免无限增长。
 
 ### 6.2 `weekly_runs` —— 开源周报运行记录
 

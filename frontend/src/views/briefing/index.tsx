@@ -6,10 +6,12 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiError, describeApiError, request } from '@/api/client'
+import { cancelRun, getProgress, isTerminal, startRunAsync, type RunProgress } from '@/api/run'
 import { Badge } from '@/components/Badge'
 import { Button } from '@/components/Button'
 import { EmptyState } from '@/components/EmptyState'
 import { Skeleton } from '@/components/Skeleton'
+import ItemsPanel from './ItemsPanel'
 import type { ViewProps } from '@/views/types'
 
 /* ---------------------------------------------------------------- 契约类型 */
@@ -20,13 +22,18 @@ export interface SourceReportItem {
   ok: boolean
   count: number
   error?: string | null
+  skipped?: boolean
 }
 
 export interface BriefingSource {
-  id: number
+  /** 后端 BriefingSourceView.id 是源 id 字符串（如 openai），不是数字 */
+  id: string
   name: string
   url: string
   kind: string
+  /** 已知不可达的源：不请求、不计失败，但仍展示并说明原因 */
+  skipped?: boolean
+  note?: string | null
 }
 
 export interface BriefingRun {
@@ -58,6 +65,7 @@ export function parseSourceReport(raw: unknown): SourceReportItem[] {
       ok: item.ok !== false,
       count: Number(item.count ?? 0) || 0,
       error: item.error == null ? null : String(item.error),
+      skipped: item.skipped === true,
     }))
 }
 
@@ -85,6 +93,8 @@ export default function BriefingView({ ctx }: ViewProps) {
   const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('loading')
   const [error, setError] = useState('')
   const [running, setRunning] = useState(false)
+  const [progress, setProgress] = useState<RunProgress | null>(null)
+  const [activeRunId, setActiveRunId] = useState<number | null>(null)
   const [lastRun, setLastRun] = useState<BriefingRun | null>(null)
   const abortRef = useRef<AbortController | null>(null)
 
@@ -120,30 +130,61 @@ export default function BriefingView({ ctx }: ViewProps) {
   const runNow = useCallback(async () => {
     if (running) return
     setRunning(true)
+    setProgress(null)
     try {
-      const data = await request<BriefingRun>('/api/briefing/run', { method: 'POST' })
+      const started = await startRunAsync('briefing')
+      setActiveRunId(started.runId)
+      let current: RunProgress | null = null
+      // 协作式轮询：完成后再取 run 明细，沿用原有结果区与 toast
+      for (let attempt = 0; attempt < 600; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 500))
+        current = await getProgress('briefing', started.runId)
+        setProgress(current)
+        if (isTerminal(current.status) || current.cancelled) break
+      }
+      const detail = await request<{ run: BriefingRun }>(`/api/briefing/runs/${started.runId}`)
+      const data = detail.run
       setLastRun(data)
-      const noteId = data.noteId ?? null
-      ctx.toast.success(
-        `简报已生成：新内容 ${data.newItems} 条 / 共检查 ${data.totalItems} 条` +
-          (noteId ? '，点击「打开简报」查看' : ''),
-      )
-      await load()
+      if (current?.cancelled || current?.status === 'cancelled') {
+        ctx.toast.warn('已取消本次简报生成')
+      } else {
+        ctx.toast.success(
+          `简报已生成：新内容 ${data.newItems} 条 / 共检查 ${data.totalItems} 条` +
+            (data.noteId ? '，点击「打开简报」查看' : ''),
+        )
+      }
+      await Promise.all([load(), ctx.refreshNotes(), ctx.refreshTree()])
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         ctx.toast.warn('已有简报任务在进行中，请稍后再试')
+      } else if (err instanceof ApiError && err.status === 403) {
+        ctx.toast.warn('AI 简报功能当前已关闭（kb.briefing.enabled=false），可在服务端配置中开启')
       } else {
         ctx.toast.error(`生成简报失败：${describeApiError(err)}`)
       }
     } finally {
       setRunning(false)
+      setProgress(null)
+      setActiveRunId(null)
     }
   }, [ctx, load, running])
 
+  const cancelNow = useCallback(async () => {
+    if (activeRunId === null) return
+    try {
+      await cancelRun('briefing', activeRunId)
+      ctx.toast.info('已发送取消请求，当前阶段结束后停止')
+    } catch (err) {
+      ctx.toast.error(`取消失败：${describeApiError(err)}`)
+    }
+  }, [activeRunId, ctx])
+
   const latestReport = (runs[0]?.sourceReport ?? lastRun?.sourceReport) as unknown
   const reportItems = parseSourceReport(latestReport)
+  // sourceReport[].source 写的是 source.id（如 "openai"），不是显示名；用 display name 查会永远 miss
   const reportBySource = new Map(reportItems.map((item) => [item.source, item]))
   const sourceFailures = reportItems.filter((item) => !item.ok).length
+  const latestRunId = runs[0]?.id ?? lastRun?.id ?? null
 
   return (
     <div className="vw-brief">
@@ -166,9 +207,13 @@ export default function BriefingView({ ctx }: ViewProps) {
 
       <div className="vw-brief__body">
         {running ? (
-          <p className="vw-brief__progress" role="status">
-            正在抓取各源并生成简报，单个源最长等待 15 秒，请稍候…
-          </p>
+          <div className="vw-brief__progress" role="status" aria-live="polite">
+            <p>{progress?.stageLabel ?? '正在启动任务…'}{progress?.total ? `（${progress.done}/${progress.total}）` : ''}</p>
+            <div className="vw-brief__progress-track">
+              <div className="vw-brief__progress-fill" style={{ width: progress?.total ? `${Math.round((progress.done / progress.total) * 100)}%` : '12%' }} />
+            </div>
+            <Button size="sm" variant="ghost" onClick={() => void cancelNow()}>取消本次生成</Button>
+          </div>
         ) : null}
 
         {lastRun ? (
@@ -210,6 +255,8 @@ export default function BriefingView({ ctx }: ViewProps) {
 
         {phase === 'ready' ? (
           <>
+            <ItemsPanel ctx={ctx} runId={latestRunId} />
+
             <section className="vw-brief__card">
               <div className="vw-brief__card-head">
                 <h2 className="vw-brief__card-title">源状态</h2>
@@ -220,22 +267,33 @@ export default function BriefingView({ ctx }: ViewProps) {
               {sources.length === 0 ? (
                 <p className="vw-brief__faint vw-brief__card-body">还没有配置源。</p>
               ) : (
-                <div className="vw-brief__tablewrap">
-                  <table className="vw-brief__table">
+                <div
+                  className="vw-brief__tablewrap"
+                  role="region"
+                  tabIndex={0}
+                  aria-label="源状态表，可滚动查看全部列"
+                >
+                  <table className="vw-brief__table vw-brief__table--sources">
+                    <caption className="vw-brief__caption">源状态</caption>
                     <thead>
                       <tr>
-                        <th>源</th>
-                        <th>类型</th>
-                        <th>链接</th>
-                        <th>最近一次</th>
+                        <th scope="col">源</th>
+                        <th scope="col">类型</th>
+                        <th scope="col">链接</th>
+                        <th scope="col">最近一次</th>
                       </tr>
                     </thead>
                     <tbody>
                       {sources.map((source) => {
-                        const report = reportBySource.get(source.name)
+                        const report = reportBySource.get(source.id)
                         return (
                           <tr key={source.id}>
-                            <td className="vw-brief__cell-name">{source.name}</td>
+                            <th scope="row" className="vw-brief__cell-name">
+                              {source.name}
+                              {source.skipped ? (
+                                <span className="vw-brief__skipped">已知不可达 · 本次跳过</span>
+                              ) : null}
+                            </th>
                             <td>
                               <Badge tone="neutral">{KIND_TEXT[String(source.kind).toLowerCase()] ?? source.kind}</Badge>
                             </td>
@@ -245,18 +303,22 @@ export default function BriefingView({ ctx }: ViewProps) {
                                 href={source.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                title={source.url}
                               >
                                 {source.url}
                               </a>
                             </td>
                             <td>
-                              {report ? (
+                              {source.skipped || report?.skipped ? (
+                                <span className="vw-brief__faint">
+                                  {report?.error || source.note || '本次已跳过'}
+                                </span>
+                              ) : report ? (
                                 report.ok ? (
                                   <Badge tone="success">{report.count} 条</Badge>
                                 ) : (
-                                  <span title={report.error ?? ''}>
+                                  <span className="vw-brief__fail">
                                     <Badge tone="danger">未取到</Badge>
+                                    <span className="vw-brief__fail-reason">{report.error || '原因未知'}</span>
                                   </span>
                                 )
                               ) : (
@@ -290,21 +352,27 @@ export default function BriefingView({ ctx }: ViewProps) {
                   />
                 </div>
               ) : (
-                <div className="vw-brief__tablewrap">
-                  <table className="vw-brief__table">
+                <div
+                  className="vw-brief__tablewrap"
+                  role="region"
+                  tabIndex={0}
+                  aria-label="简报运行历史表，可滚动查看全部列"
+                >
+                  <table className="vw-brief__table vw-brief__table--runs">
+                    <caption className="vw-brief__caption">简报运行历史</caption>
                     <thead>
                       <tr>
-                        <th>时间</th>
-                        <th>状态</th>
-                        <th className="vw-brief__cell-num">新内容</th>
-                        <th className="vw-brief__cell-num">检查</th>
-                        <th>笔记</th>
+                        <th scope="col">时间</th>
+                        <th scope="col">状态</th>
+                        <th scope="col" className="vw-brief__cell-num">新内容</th>
+                        <th scope="col" className="vw-brief__cell-num">检查</th>
+                        <th scope="col">笔记</th>
                       </tr>
                     </thead>
                     <tbody>
                       {runs.map((run) => (
                         <tr key={run.id}>
-                          <td className="vw-brief__cell-time">{ctx.relativeTime(run.startedAt)}</td>
+                          <th scope="row" className="vw-brief__cell-time">{ctx.relativeTime(run.startedAt)}</th>
                           <td>
                             <Badge tone={statusTone(run.status)}>{STATUS_TEXT[run.status] ?? run.status}</Badge>
                           </td>

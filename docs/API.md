@@ -44,7 +44,8 @@
 { "items": [], "page": 1, "size": 50, "total": 123 }
 ```
 > 所有**列表类**端点统一用此信封，包括 `/api/notes`、`/api/search`、`/api/admin/users`、`/api/admin/invites`、`/api/trash` 内的数组。
-> 例外：`/api/notes/{id}/versions`、`/api/notes/{id}/backlinks`、`/api/notes/{id}/links`、`/api/tags`、`/api/recent`、`/api/favorites` 返回裸数组或对象（数量天然有界）。
+> 例外：`/api/notes/{id}/versions`、`/api/notes/{id}/backlinks`、`/api/notes/{id}/links`、`/api/tags`、`/api/recent` 返回裸数组或对象（数量天然有界）。
+> 注意：`/api/favorites` **不是例外**，它同样返回分页信封 `{items,page,size,total}`（见 §4 与 `FavoritesController`）。
 
 ---
 
@@ -136,7 +137,7 @@
 | `GET` | `/api/notes` | 列表（**不含正文**）。参数：`folderId`、`tag`、`q`、`favorite`、`page`、`size`、`sort`(`updated`\|`created`\|`title`) |
 | `GET` | `/api/notes/{id}` | 详情，含 `content`、`tags`、`backlinkCount` |
 | `POST` | `/api/notes` | `{folderId?, title?, content?}` → 201 |
-| `PATCH` | `/api/notes/{id}` | `{folderId?, title?, content?, isFavorite?, isPinned?, sortOrder?}` |
+| `PATCH` | `/api/notes/{id}` | `{folderId?, title?, content?, isFavorite?, isPinned?, sortOrder?, createVersion?, forceVersion?}`。默认仅标题/正文变化才建历史版本并递增 `version`；`createVersion:false` 只落正文（自动保存，不建版本、不递增 `version`）；`forceVersion:true` 即使内容没变也留一个快照（用户显式「存为版本」/ Ctrl+S） |
 | `DELETE` | `/api/notes/{id}` | 软删，204 |
 | `POST` | `/api/notes/{id}/view` | 记一次浏览（写 `activities`），204 |
 | `GET` | `/api/notes/{id}/links` | 出链：`{resolved: [...], dangling: [...]}`，元素结构见 §4.1 |
@@ -318,8 +319,8 @@
 | `GET` | `/api/export/notes/{id}.zip` | **导出单篇为 ZIP（界面用这个）**：`{标题}.md` + `attachments/{id}-{原名}`（**只含该篇正文实际引用到的附件**）+ `manifest.json` |
 | `GET` | `/api/export/notes/{id}.md` | **仅正文，不含附件**（保留兼容；图片引用是相对路径，图片需自备）。界面不再使用 |
 | `GET` | `/api/export/all` | 导出全部为 ZIP：`notes/{目录路径}/{标题}.md` + `attachments/` + `manifest.json` |
-| `POST` | `/api/import/markdown` | `multipart`：多个 `.md` / 图片 / 一个 `.zip` |
-| `POST` | `/api/import/preview` | 同上但只解析不入库，返回将要创建的条目供确认 |
+| `POST` | `/api/import/markdown` | `multipart`：多个 `.md` / 图片 / 一个 `.zip`；可选 `targetFolderId` 指定导入到哪一级目录（不传=未分类/原有行为） |
+| `POST` | `/api/import/preview` | 同上但只解析不入库，返回将要创建的条目供确认；`items[].folder` 会带上目标目录的完整路径 |
 
 ### 10.0 完整性约定（v1 修订：单篇导出改为 ZIP）
 
@@ -514,7 +515,17 @@ POST /api/briefing/run
 ```
 
 - 需登录。**不接受 `spaceId` 参数** —— 永远写进调用者自己所在空间，杜绝越权写。
-- 同步执行（内部并发抓各源），正常 10–20s。
+- 同步执行（内部并发抓各源），正常 10–20s；这是默认模式，行为未变。
+- **P2 可选异步**：`POST /api/briefing/run?async=true` → `202 {runId, status:"running"}`，进度走下方通用端点；前端默认使用异步模式。
+
+### §11.1.1 运行进度与取消（P2 / run-lifecycle，简报与周报同语义）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `GET` | `/api/runs/{module}/{runId}/progress` | `{runId,status,stage,stageLabel,done,total,cancelled,startedAt,finishedAt}`；阶段 `fetching/enriching/quality_ai/rendering/done/failed/cancelled` |
+| `POST` | `/api/runs/{module}/{runId}/cancel` | 协作式取消：标记后跳过后续阶段，不打断在途 HTTP |
+
+`module` 只能是 `briefing` / `weekly`。同一空间同时只允许一个 run：数据库部分唯一索引 `WHERE status='running'` 兜底，多实例也生效；第二个请求返回 **409**。`weekly` 异步入口为 `POST /api/weekly/run?async=true`，完成后可用 `GET /api/weekly/runs/{id}` 取 run 明细。
 
 返回 `200`：
 
@@ -548,6 +559,19 @@ GET /api/briefing/runs?limit=10
 
 返回 `{ "items": [ { id, startedAt, finishedAt, status, totalItems, newItems, noteId, sourceReport } ] }`，按 `started_at` 倒序。`limit` 默认 10，上限 **100**（代码 `Math.min(limit, 100)`；早期文档写的 50 与实现不符，已按实现修正）。
 
+### §11.2.1 条目明细与反馈（P1 / briefing-experience）
+
+> **note 正文格式完全不变**；以下接口只服务于 `#/briefing` 网页视图。
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `GET` | `/api/briefing/runs/{id}` | `{run, items:[BriefingItem]}`；越空间或不存在 → 404 |
+| `GET` | `/api/briefing/items?runId=&theme=&minScore=&q=&page=&size=` | 分页条目，默认按质量分倒序；`page/size` 归一化 |
+| `POST` | `/api/briefing/items/feedback` | `{url, feedback:"useful"\|"not_interesting"}` → `{ok:true}`；同用户同 URL 幂等覆盖 |
+
+`BriefingItem` 字段：`{url, title, summary, source, theme, qualityScore, accepted, rank, keyPoints, whyItMatters, relatedTitles, engagement, engagementLevel, corroboration, sourceLinks, topQuote}`。其中 `engagement` 为真实互动量热度（HN points + 评论×2 + 跨源印证加分），`corroboration > 1` 表示同一事件被多个源报道，`sourceLinks` 元素形如 `来源名|URL`，`topQuote` 是 HN 高赞原话（可能为 null）。详见 `docs/CONTENT-ENGAGEMENT.md`。
+主题固定 5 类（模型 / 产品 / 研究 / 政策 / 工具），AI tags 优先、关键词兜底；`relatedTitles` 来自本地全文检索（`kb.briefing.personalize`，纯本地不外发）。
+
 ## §11.3 源清单
 
 ```
@@ -555,14 +579,15 @@ GET /api/briefing/sources
 ```
 
 返回 `{ "items": [ { id, name, url, kind } ] }`，`kind` ∈ `RSS` / `HTML` / `JSON`。
-被跳过的源仍会返回，并带 `skipped: true` 与 `reason`，供界面标注「已知不可达」。
+被跳过的源仍会返回，并带 `skipped: true` 与 `note`，供界面标注「已知不可达」。
+`BriefingSourceView.id` 是**源 id 字符串**（如 `openai`），`sourceReport[].source` 同样是源 id，不是显示名 —— 前端必须按 id 关联两者。
 
 ## §11.4 配置项（`application.properties`）
 
 > **v1 修订（2026-10-28）**：原表只登记了 7 个键，而 `application.properties` 实际有 **28 个生效键**；且 `kb.briefing.folder` 的默认值写成了「AI简报」，仓库里的实际值是 `AI时代笔记`。下表**以 `application.properties` 为准**逐键重写。
 > 中文值必须写成 `\uXXXX` 转义（`.properties` 按 ISO-8859-1 解码，直接写中文会变乱码）。
 
-### §11.4.1 每日简报 `kb.briefing.*`（13 键）
+### §11.4.1 每日简报 `kb.briefing.*`（16 键）
 
 | 键 | 仓库实际值 | 说明 |
 |---|---|---|
@@ -576,6 +601,10 @@ GET /api/briefing/sources
 | `kb.briefing.deepl-endpoint` | 空 | 显式覆盖 DeepL 端点（一般留空） |
 | `kb.briefing.fetch-article` | `true` | 是否抓文章页拿更充实的摘要与首图（失败静默跳过） |
 | `kb.briefing.max-images` | `20` | 单次运行最多下载几张配图 |
+| `kb.briefing.personalize` | `true` | 本地个性化：纯本地全文检索找相关笔记标题，不外发任何内容 |
+| `kb.briefing.cache-ttl-days` | `30` | 缓存条目超过该天数视为过期，重新翻译/抓页；**翻译失败的条目不写译文缓存**，下次运行重试 |
+| `kb.briefing.cache-retention-days` | `90` | 长期未刷新的缓存行滚动清理天数（每次 run 开始时执行） |
+| `kb.briefing.seen-retention-days` | `180` | 跨天去重台账的滚动清理天数（每次 run 开始时执行） |
 | `kb.briefing.skip-sources` | `importai` | 跳过抓取的源 id，逗号分隔（不请求、不计失败、仍出现在源清单） |
 | `kb.briefing.folder` | `AI时代笔记` | 归属目录名；**不存在时用根目录，不自动建目录** |
 | `kb.briefing.tags` | `AI简报` | 打给简报笔记的标签，逗号分隔 |
@@ -612,6 +641,43 @@ GET /api/briefing/sources
 | 键 | 仓库实际值 | 说明 |
 |---|---|---|
 | `kb.autotag.enabled` | `false` | 默认关闭（先让人观察效果，避免乱打标签）。关闭时 `POST /api/autotag/run` 返回 `200` + `{scanned:0,tagged:0,tags:[]}`，不写任何标签 |
+
+### §11.4.5 内容质量闸门 `kb.quality.*`（4 键，P1）
+
+| 键 | 仓库实际值 | 说明 |
+|---|---|---|
+| `kb.quality.enabled` | `true` | 简报生成前评分，低分条目降级保留在正文 |
+| `kb.quality.threshold` | `70` | ≥70 分才进「今日必读」候选 |
+| `kb.quality.template-patterns` | 空 | 追加到内置实测清单的正则，逗号分隔 |
+| `kb.quality.report-limit` | `50` | 只读报告 `GET /api/quality/report` 的扫描上限 |
+
+### §11.4.6 结构化 AI 分析 `kb.ai.*`（8 键，P1，默认全关）
+
+| 键 | 仓库实际值 | 说明 |
+|---|---|---|
+| `kb.ai.enabled` | `false` | 总开关；关闭时 `AnalysisClient` 注入 Noop，**零 HTTP 调用** |
+| `kb.ai.provider` | `none` | `none` / `openai-compatible`（同一实现覆盖 OpenAI 与本地 Ollama） |
+| `kb.ai.base-url` | 空 | 强制显式配置；非 http(s) 直接跳过 |
+| `kb.ai.model` | 空 | 强制显式配置 |
+| `kb.ai.timeout-seconds` | `20` | 单次调用超时 |
+| `kb.ai.max-items-per-run` | `20` | 单次运行成本上限 |
+| `kb.ai.max-retries` | `1` | 失败重试次数（最多 1 次） |
+| `kb.ai.cache-ttl-days` | `30` | 分析缓存有效期；内容哈希变化会重新分析 |
+
+> API key 只从环境变量 `KB_AI_API_KEY` 读取，不写进配置文件、不进日志。详见 `docs/AI-ANALYSIS.md`。
+
+## §11.4.7 运行可观测性 `GET /api/ops/*`（P2）
+
+- `GET /api/ops/runs?module=&limit=20&all=true`：指标明细，普通用户只看自己空间，`all=true` 仅管理员生效。
+- `GET /api/ops/summary?module=&days=7`：**仅管理员**，聚合全部空间，返回 `{runs, successRate, p50Ms, p95Ms, avgItems, aiCalls, tokens, estimatedCost, sourceHealth}`。
+- 指标表 `run_metrics` 与字段说明见 `docs/OBSERVABILITY.md`；成本默认 0（单价需显式配置）。
+- `GET /api/ops/sources?module=briefing`：逐源健康（成功率 / p95 延迟 / 连续失败 / 冷却），按空间隔离；连续失败 5 次冷却 30 分钟，冷却期内不请求，详见 `docs/SOURCE-HEALTH.md`。
+
+### §11.4.8 元数据保留与安全（P2）
+
+- `kb.retention.enabled/cron/cache-days/seen-days/metrics-days/health-days/quality-days/ai-days/weekly-days`：每天 04:30 只清元数据表，**不动笔记、附件、归档与运行历史**，详见 `docs/RETENTION-SECURITY.md`。
+- `kb.briefing.semantic-dedupe=true`：5-gram Jaccard ≥0.85 的跨源近重复条目直接丢弃。
+- `kb.security.ssrf-dns-check=true`：抓取源做 DNS 层 SSRF 校验；重定向每跳重校验；本地 Ollama 的 localhost 由 AI base-url 单独豁免。
 
 ## §11.5 定时与补抓
 
@@ -688,6 +754,17 @@ GET /api/briefing/sources
 **默认 `kb.autotag.enabled=false`** —— 中文词边界模糊，误打标签清理成本高，建议先手动跑看建议。
 
 ## §12.5 开源周报
+
+### §12.5.1 周报体验 API（P1 / weekly-experience，note 正文不变）
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `GET` | `/api/weekly/weeks` | 历史 ISO 周列表 `[{isoWeek, projects}]` |
+| `GET` | `/api/weekly/week/{isoWeek}` | 周总览 `{isoWeek, projects, highlights, themes}`；Top3 解读 `aiGenerated=false` 表示规则兜底；`project` 含 `openIssues` / `forks`（GitHub 开放 issue/PR 与 fork 数，拿不到为 null） |
+| `GET` | `/api/weekly/repos/stars?source=&repo=&weeks=8` | 星增序列 `[{capturedAt, stars, delta}]`；首点 `delta` 为 null |
+| `GET` | `/api/weekly/profiles?source=&repo=` | 项目档案（首次上榜周、连续周数、最高周增） |
+
+星增来自真实相邻快照差；首次收录不编数字，标注「新进榜 · 基线建立中」。现有 10 篇周报笔记与 `POST /api/weekly/run` 均不受影响。
 
 | 接口 | 说明 |
 |---|---|

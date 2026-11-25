@@ -79,8 +79,8 @@ try {
     const c = JSON.parse(cards)
     check('本周项目：渲染出 10 张卡片', c.total === 10, cards)
     check('本周项目：GitHub / Gitee 两组各 5 个', c.groups.length === 2 && /GitHub 5/.test(c.groups[0]) && /Gitee 5/.test(c.groups[1]), JSON.stringify(c.groups))
-    // 首次收录时后端写的是「本周新增 ⭐ —（首次收录，下周起显示）」→ 没有 +N 就不显示（不瞎猜）
-    check('卡片显示「总星 / 语言」（有历史快照时才有「本周 +N」）', /总星/.test(c.chips.join(' ')) && c.chips.length >= 2, JSON.stringify(c.chips))
+    // GitHub 用 trending 官方周增，卡片必须解析出「本周 +N」；Gitee 首次收录才显示「—」
+    check('卡片显示「本周 +N / 总星 / 语言」', /本周\s*\+/.test(c.chips.join(' ')) && /总星/.test(c.chips.join(' ')) && c.chips.length >= 3, JSON.stringify(c.chips))
     check('卡片显示一句话价值', String(c.firstValue).length > 20, String(c.firstValue).slice(0, 80))
     await page.screenshot(join(SHOTS, 'weekly-cards-1440.png'))
 
@@ -108,17 +108,17 @@ try {
     await page.setViewport(1440, 900)
     await sleep(700)
 
-    /* 4. 409 二次确认（真实并发触发的 409） */
+    /* 4. 409：语义是「任务正在跑」，用黄条提示，不弹二次确认、不给重试按钮 */
     await ev('(function(){ window.__firstRun = fetch("/api/weekly/run",{method:"POST"}); return true })()')
     await sleep(400)
     await ev(runBtn + '.click()')
-    await page.waitFor('document.querySelector(".kb-modal") !== null', { timeout: 40000 })
+    await page.waitFor('document.querySelector(".vw-weekly__strip.is-warning") !== null', { timeout: 40000 })
     await sleep(500)
-    const dialog = await ev('document.querySelector(".kb-modal").innerText')
-    check('409：弹出二次确认（含「已经生成过」并说明不会重复）', /已经生成过/.test(String(dialog)) && /不会重复生成/.test(String(dialog)), String(dialog).replace(/\s+/g, ' ').slice(0, 200))
-    await page.screenshot(join(SHOTS, 'weekly-409-confirm-1440.png'))
-    const cancelBtn = await ev('(function(){var b=Array.prototype.find.call(document.querySelectorAll(".kb-modal button"),function(x){return x.textContent.trim()==="取消"});if(!b)return false;b.click();return true})()')
-    check('409：确认框有「再生成 / 取消」', cancelBtn === true, String(cancelBtn))
+    const busy = await ev('(function(){var s=document.querySelector(".vw-weekly__strip");return JSON.stringify({text:s.textContent.trim(),btns:s.querySelectorAll("button").length,modals:document.querySelectorAll(".kb-modal").length})})()')
+    const busyState = JSON.parse(busy)
+    check('409：黄条提示「正在生成中…」', /正在生成中/.test(busyState.text) && /15.?40\s*秒/.test(busyState.text), busy)
+    check('409：不弹确认框、不给重试按钮', busyState.modals === 0 && busyState.btns === 0, busy)
+    await page.screenshot(join(SHOTS, 'weekly-409-busy-1440.png'))
     await sleep(800)
   }
   if (PHASE === 'canned') {

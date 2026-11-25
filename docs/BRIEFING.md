@@ -220,3 +220,5 @@ GET  /api/briefing/sources        -> 200 { items:[{id,name,url,kind}] }
 - **同 run 内不重复请求同一 URL**
 - **渲染纯函数**：无副作用、可单测、排序稳定（同内容两次渲染字节一致）
 - **日志**：一次 run 一行摘要（INFO），逐源明细用 DEBUG，不要把正文打进日志
+- **缓存一致性（P0 已修）**：翻译失败不再写死进 `briefing_cache`（`translation_failed=1` 下次重试）；文章页/配图与译文统一在富化末尾一次回写，避免两条提前返回路径漏写；缓存按 `cache-ttl-days` 过期、按 `cache-retention-days` 清理，去重台账按 `seen-retention-days` 清理
+- **调度隔离（P0 已修）**：`application.properties` 配 `spring.task.scheduling.pool.size=3`，简报 / 周报 / 归档三个任务不再抢同一个默认单线程

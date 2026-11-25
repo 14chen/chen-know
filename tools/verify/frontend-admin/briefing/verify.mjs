@@ -53,7 +53,7 @@ async function run() {
     check('源状态表：4 条源全部渲染', (await count('.vw-brief__table tbody tr')) >= 4, JSON.stringify(urls))
     check(
       '源状态表：链接可点且目标正确（新窗口 + noopener）',
-      links.length === 4 &&
+      links.length === 5 &&
         links.every((l) => /^https:\/\//.test(l.href) && l.target === '_blank' && /noopener/.test(String(l.rel))),
       JSON.stringify(links.slice(0, 2)),
     )
@@ -63,6 +63,21 @@ async function run() {
       (await text()).slice(0, 120),
     )
     check('源状态表：暴露最近一次每源状态（含失败源）', (await count('.vw-brief__table tbody tr')) >= 4 && /未取到/.test(await text()), (await text()).replace(/\n/g, ' | ').slice(0, 240))
+    check('源状态表：失败原因肉眼可见（不只放在 title 上）', /HTTP 403/.test(await text()) && (await count('.vw-brief__fail-reason')) === 1, (await text()).replace(/\n/g, ' | ').slice(0, 240))
+    check('源状态表：跳过的源显示「已知不可达」', /已知不可达/.test(await text()) && (await count('.vw-brief__skipped')) === 1, (await text()).slice(0, 200))
+
+    /* ---------- P1 条目面板 ---------- */
+    await page.waitFor('document.querySelectorAll(".vw-brief__pick-card").length >= 5', { timeout: 15000 })
+    check('今日必读：只展示质量分 ≥70 的最多 5 条', (await count('.vw-brief__pick-card')) >= 5 && /今日必读/.test(await text()), 'cards=' + (await count('.vw-brief__pick-card')))
+    await b('(function(){var btns=document.querySelectorAll(".vw-brief__themes button");var t=Array.prototype.find.call(btns,function(x){return x.textContent.trim()==="研究"});if(!t)return false;t.click();return true})()')
+    await sleep(500)
+    check('主题筛选：切到「研究」后列表变化', /研究/.test(await text()), (await text()).slice(0, 160))
+    await b('(function(){var t=Array.prototype.find.call(document.querySelectorAll(".vw-brief__themes button"),function(x){return x.textContent.trim()==="全部"});if(t)t.click();return true})()')
+    await sleep(400)
+    await resetCalls()
+    check('详情抽屉：点击卡片打开', await b('(function(){var b=document.querySelector(".vw-brief__pick-main");if(!b)return false;b.click();return true})()'), String(await count('.vw-brief__drawer')))
+    check('详情抽屉：包含关键点与原文链接', /关键点/.test(await text()) && /打开原文/.test(await text()), (await text()).slice(-240))
+    await b('(function(){var b=document.querySelector(".vw-brief__drawer .kb-btn");if(b)b.click();return true})()')
 
     /* ---------- 运行历史（12）+ 跳转 ---------- */
     check('运行历史：渲染已有的 2 次运行', (await text()).includes('部分成功') && (await text()).includes('成功'), (await text()).replace(/\n/g, ' | ').slice(0, 200))
@@ -89,6 +104,7 @@ async function run() {
     check('立即生成：回显「新内容 N 条 / 共检查 M 条」', /新内容\s*7\s*条/.test(resultText) && /共检查\s*42\s*条/.test(resultText.replace(/\s+/g, ' ')), resultText.replace(/\n/g, ' | '))
     const genCalls = await calls()
     check('立即生成：成功 toast + 历史刷新后能看到新 run', genCalls.toasts.some((t) => t[0] === 'success' && /新内容 7 条/.test(t[1])), JSON.stringify(genCalls.toasts))
+    check('立即生成：同步刷新外壳笔记列表与目录树', genCalls.refreshNotes === 1 && genCalls.refreshTree === 1, JSON.stringify({ refreshNotes: genCalls.refreshNotes, refreshTree: genCalls.refreshTree }))
     await page.waitFor("(document.querySelectorAll('.vw-brief__table')[1]?.querySelectorAll('tbody tr').length ?? 0) === 3", { timeout: 10000 })
     const historyText = await b("(Array.from(document.querySelectorAll('.vw-brief__table'))[1]?.innerText) ?? ''")
     check('立即生成：新 run 出现在历史里（3 条）', (historyText.match(/打开简报/g) || []).length >= 3, historyText.replace(/\n/g, ' | ').slice(0, 200))
@@ -151,6 +167,15 @@ async function run() {
       await sleep(200)
       const ov = await b('JSON.parse(JSON.stringify(window.__B.overflow()))')
       check('#' + size.w + '×' + size.h + '：无横向溢出', ov.docScroll <= ov.docClient, JSON.stringify(ov))
+      check('#' + size.w + '：源状态 5 行完整渲染', (await count('.vw-brief__table--sources tbody tr')) === 5, 'rows=' + (await count('.vw-brief__table--sources tbody tr')))
+      const notClipped = await b(`(function(){
+        var card = document.querySelector('.vw-brief__table--sources').closest('.vw-brief__card');
+        var rows = card.querySelectorAll('tbody tr');
+        var last = rows[rows.length - 1].getBoundingClientRect();
+        var box = card.getBoundingClientRect();
+        return last.bottom <= box.bottom + 1;
+      })()`)
+      check('#' + size.w + '：卡片没有裁掉最后一行源', notClipped === true, String(notClipped))
       const btn = await b("JSON.parse(JSON.stringify(window.__B.rects('.vw-brief__actions .kb-btn')))")
       check('#' + size.w + '：按钮可见', Array.isArray(btn) && btn.length === 2 && btn.every((r) => r.w > 0 && r.h > 0), JSON.stringify(btn))
       await page.screenshot(SHOTS + 'briefing-' + size.name + '.png')

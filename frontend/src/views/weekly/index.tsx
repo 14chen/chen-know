@@ -26,6 +26,19 @@ import { Button } from '@/components/Button'
 import { EmptyState } from '@/components/EmptyState'
 import { Skeleton } from '@/components/Skeleton'
 import type { ViewProps } from '@/views/types'
+import { cancelRun, getProgress, isTerminal, startRunAsync, type RunProgress } from '@/api/run'
+import WeeklyOverview from './WeeklyOverview'
+
+interface WeeklyRunDetail {
+  id: number
+  isoWeek: string
+  status: string
+  notesCreated: number
+  notesSkipped: number
+  githubCount: number
+  giteeCount: number
+  error: string | null
+}
 import '@/styles/views-weekly.css'
 
 const WEEKLY_FOLDER = '开源周报'
@@ -33,25 +46,6 @@ const WEEK_PATTERN = /^\d{4}-W\d{2}$/
 const CONCURRENCY = 4
 
 /* ------------------------------------------------------------ 契约类型 */
-
-interface NoteRef {
-  id: number
-  title: string
-  repo: string
-  url: string
-  weeklyStars?: number | null
-}
-
-interface WeeklyRunResponse {
-  runId: number
-  isoWeek: string
-  status: string
-  notesCreated: number
-  notesSkipped: number
-  notes: NoteRef[]
-  githubNote?: string | null
-  giteeNote?: string | null
-}
 
 interface WeeklyRunRow {
   id: number
@@ -137,7 +131,8 @@ export function extractRepoMeta(content: string): RepoMeta {
     const cells = row.split('|').map((cell) => cell.trim()).filter(Boolean)
     if (cells.length < 2) continue
     if (/^本周新增$/.test(cells[0])) {
-      const value = cells[1].replace(/\*\*/g, '').trim()
+      // 后端输出形如 `**+7,539** ⭐`；星号与 emoji 都要剥掉，否则 chip 永远解析不出
+      const value = cells[1].replace(/\*\*/g, '').replace(/⭐/g, '').trim()
       if (/^[+\-]?[\d,]+$/.test(value)) meta.weeklyStars = value
     } else if (/^总星$/.test(cells[0])) {
       const value = cells[1].replace(/\*\*/g, '').trim()
@@ -195,6 +190,8 @@ export default function WeeklyView({ ctx }: ViewProps) {
   const [error, setError] = useState('')
   const [running, setRunning] = useState(false)
   const [banner, setBanner] = useState<Banner | null>(null)
+  const [progress, setProgress] = useState<RunProgress | null>(null)
+  const [activeRunId, setActiveRunId] = useState<number | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const listRef = useRef<HTMLDivElement | null>(null)
 
@@ -267,11 +264,23 @@ export default function WeeklyView({ ctx }: ViewProps) {
       setRunning(true)
       setBanner({ kind: 'loading' })
       try {
-        const data = await request<WeeklyRunResponse>('/api/weekly/run', { method: 'POST' })
-        const github = data.notes.filter((note) => sourceOf(note.title) === 'github').length
-        const gitee = data.notes.filter((note) => sourceOf(note.title) === 'gitee').length
-        if (data.status === 'failed') {
-          const reason = [data.githubNote, data.giteeNote].filter(Boolean).join('；') || '后端未返回具体原因'
+        const started = await startRunAsync('weekly')
+        setActiveRunId(started.runId)
+        let current: RunProgress | null = null
+        for (let attempt = 0; attempt < 600; attempt++) {
+          await new Promise((resolve) => setTimeout(resolve, 500))
+          current = await getProgress('weekly', started.runId)
+          setProgress(current)
+          if (isTerminal(current.status) || current.cancelled) break
+        }
+        const data = await request<WeeklyRunDetail>(`/api/weekly/runs/${started.runId}`)
+        const github = data.githubCount
+        const gitee = data.giteeCount
+        if (current?.status === 'cancelled') {
+          setBanner({ kind: 'exists', skipped: 0 })
+          ctx.toast.warn('已取消本次周报生成')
+        } else if (data.status === 'failed') {
+          const reason = data.error || '后端未返回具体原因'
           setBanner({ kind: 'failed', message: reason, retryable: true })
           ctx.toast.error('本周周报生成失败')
         } else if (data.notesCreated === 0 && data.notesSkipped > 0) {
@@ -279,8 +288,7 @@ export default function WeeklyView({ ctx }: ViewProps) {
           setBanner({ kind: 'exists', skipped: data.notesSkipped })
           ctx.toast.info('本周周报已存在，未重复生成')
         } else if (data.status === 'partial') {
-          const detail = [data.githubNote, data.giteeNote].filter(Boolean).join('；')
-          setBanner({ kind: 'partial', created: data.notesCreated, skipped: data.notesSkipped, detail })
+          setBanner({ kind: 'partial', created: data.notesCreated, skipped: data.notesSkipped, detail: data.error ?? undefined })
           ctx.toast.warn('本周周报部分完成')
         } else if (data.notesCreated > 0) {
           setBanner({ kind: 'success', created: data.notesCreated, github, gitee, skipped: data.notesSkipped })
@@ -317,10 +325,22 @@ export default function WeeklyView({ ctx }: ViewProps) {
         }
       } finally {
         setRunning(false)
+        setProgress(null)
+        setActiveRunId(null)
       }
     },
     [ctx, load, running],
   )
+
+  const cancelNow = useCallback(async () => {
+    if (activeRunId === null) return
+    try {
+      await cancelRun('weekly', activeRunId)
+      ctx.toast.info('已发送取消请求，当前阶段结束后停止')
+    } catch (err) {
+      ctx.toast.error(`取消失败：${describeApiError(err)}`)
+    }
+  }, [activeRunId, ctx])
 
   const scrollToList = useCallback(() => {
     listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -358,11 +378,17 @@ export default function WeeklyView({ ctx }: ViewProps) {
       </header>
 
       <div className="vw-weekly__body">
+        <WeeklyOverview ctx={ctx} />
+
         <div className="vw-weekly__banner" aria-live="polite">
           {banner?.kind === 'loading' ? (
-            <p className="vw-weekly__strip is-info is-loading">
-              正在抓取 GitHub 与 Gitee，约需 15–40 秒，请不要关闭页面
-            </p>
+            <div className="vw-weekly__strip is-info is-loading">
+              <p>{progress?.stageLabel ?? '正在启动任务…'}{progress?.total ? `（${progress.done}/${progress.total}）` : ''}</p>
+              <div className="vw-weekly__progress-track">
+                <div className="vw-weekly__progress-fill" style={{ width: progress?.total ? `${Math.round((progress.done / progress.total) * 100)}%` : '12%' }} />
+              </div>
+              <Button size="sm" variant="ghost" onClick={() => void cancelNow()}>取消本次生成</Button>
+            </div>
           ) : null}
           {banner?.kind === 'success' ? (
             <p className="vw-weekly__strip is-success">
