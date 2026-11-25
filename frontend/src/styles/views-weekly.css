@@ -284,6 +284,67 @@
 
 .vw-weekly__time { color: var(--text-secondary); }
 
+.vw-weekly__progress-track {
+  height: 6px;
+  margin: var(--sp-2) 0;
+  border-radius: var(--r-full);
+  background: var(--bg-muted);
+  overflow: hidden;
+}
+.vw-weekly__progress-fill { height: 100%; background: var(--accent); transition: width 200ms ease; }
+
+/* ---- P1 周报总览：周选择器 / Top3 / 趋势 / 详情 ---- */
+.vw-weekly__overview {
+  display: flex; flex-direction: column; gap: var(--sp-3); margin-bottom: var(--sp-5);
+  padding: var(--sp-4); border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface);
+}
+.vw-weekly__overview-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+.vw-weekly__weekpick select {
+  padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: var(--surface); color: var(--text); font: inherit; font-size: var(--fs-sm);
+}
+.vw-weekly__subhead { font-size: var(--fs-sm); font-weight: 650; }
+.vw-weekly__highlights { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--sp-3); }
+.vw-weekly__highlight {
+  min-width: 0; padding: var(--sp-3); border: 1px solid var(--border);
+  border-radius: var(--r-sm); background: var(--bg-subtle);
+  display: flex; flex-direction: column; align-items: flex-start; gap: var(--sp-2);
+}
+.vw-weekly__highlight-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); overflow-wrap: anywhere; }
+.vw-weekly__delta { color: var(--success); font-weight: 700; }
+.vw-weekly__highlight ul, .vw-weekly__highlight p { margin: 0; font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.vw-weekly__highlight ul { padding-left: var(--sp-4); }
+.vw-weekly__spark { width: 180px; height: 40px; color: var(--accent); }
+.vw-weekly__themes { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.vw-weekly__themes button {
+  border: 1px solid var(--border); border-radius: var(--r-full); background: var(--surface);
+  color: var(--text-secondary); font: inherit; font-size: var(--fs-xs); padding: 4px 12px; cursor: pointer;
+}
+.vw-weekly__themes button.is-active { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.vw-weekly__projlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
+.vw-weekly__projlist button {
+  display: flex; align-items: center; gap: var(--sp-2); width: 100%; padding: var(--sp-2);
+  border: 0; border-radius: var(--r-sm); background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.vw-weekly__projlist button:hover { background: var(--bg-muted); }
+.vw-weekly__projrank { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.vw-weekly__projdelta { margin-left: auto; color: var(--success); font-variant-numeric: tabular-nums; }
+.vw-weekly__drawer {
+  position: fixed; inset: 0 0 0 auto; margin: 0; border: 0; padding: var(--sp-4);
+  width: min(420px, 92vw); max-width: none; max-height: none; height: 100%;
+  overflow-y: auto; color: var(--text); background: var(--surface); box-shadow: var(--shadow-md);
+  display: flex; flex-direction: column; gap: var(--sp-2);
+}
+.vw-weekly__drawer::backdrop { background: rgb(0 0 0 / 32%); }
+.vw-weekly__drawer-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-2); }
+.vw-weekly__drawer h3 { font-size: var(--fs-md); overflow-wrap: anywhere; }
+
+@media (max-width: 767px) {
+  .vw-weekly__weekpick select { width: 100%; min-height: 44px; }
+  .vw-weekly__themes button { min-height: 44px; }
+  .vw-weekly__projlist button { min-height: 44px; }
+}
+
 /* ---- 断点 ---- */
 @media (max-width: 1023px) {
   .vw-weekly__cards,

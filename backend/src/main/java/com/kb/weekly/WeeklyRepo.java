@@ -11,14 +11,22 @@ package com.kb.weekly;
  * @param language 语言（可能为 null）
  * @param description 原始描述（可能是英文，需要翻译）
  * @param updatedAt 最近更新时间的原始串（GitHub 的 relative-time datetime / Gitee 脚本换算的日期），可能为空
+ * @param openIssues 开放 issue 数（GitHub API 的 open_issues_count，含开放 PR；拿不到为 null）
+ * @param forks fork 数（GitHub API 的 forks_count；拿不到为 null）
  */
 public record WeeklyRepo(String source, String repo, String url, long stars, Integer weeklyStars,
-        String language, String description, String updatedAt) {
+        String language, String description, String updatedAt, Integer openIssues, Integer forks) {
 
-    /** 兼容不带更新时间的调用。 */
+    /** 兼容不带更新时间/互动数的调用。 */
     public WeeklyRepo(String source, String repo, String url, long stars, Integer weeklyStars,
             String language, String description) {
-        this(source, repo, url, stars, weeklyStars, language, description, null);
+        this(source, repo, url, stars, weeklyStars, language, description, null, null, null);
+    }
+
+    /** 兼容带更新时间、还没有互动数的调用。 */
+    public WeeklyRepo(String source, String repo, String url, long stars, Integer weeklyStars,
+            String language, String description, String updatedAt) {
+        this(source, repo, url, stars, weeklyStars, language, description, updatedAt, null, null);
     }
 
     public String sourceLabel() {

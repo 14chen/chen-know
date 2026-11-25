@@ -146,7 +146,8 @@ class WeeklyApiTest {
                 return TRENDING;
             }
             if (url.startsWith("https://api.github.com/repos/")) {
-                return "{\"full_name\":\"x/y\",\"pushed_at\":\"2026-10-24T08:00:00Z\"}";
+                return "{\"full_name\":\"x/y\",\"pushed_at\":\"2026-10-24T08:00:00Z\","
+                        + "\"open_issues_count\":42,\"forks_count\":7}";
             }
             if (url.startsWith("https://api.mymemory.translated.net/")
                     || url.startsWith("https://api-free.deepl.com/")) {
@@ -216,6 +217,19 @@ class WeeklyApiTest {
         }
         TRANSPORT.gate = null;
         TRANSPORT.gated.set(0);
+    }
+
+    @Test
+    @DisplayName("GitHub 开放 issue / fork 数落库，成为周报 Top3 的真实活跃度证据")
+    void weeklyEngagementIsPersisted() throws Exception {
+        jdbc.update("DELETE FROM weekly_project_weeks WHERE space_id = ?", spaceId);
+        mockMvc.perform(post("/api/weekly/run").session(session)).andExpect(status().isOk());
+        Integer issues = jdbc.queryForObject("SELECT open_issues FROM weekly_project_weeks"
+                + " WHERE space_id = ? AND source = 'github' LIMIT 1", Integer.class, spaceId);
+        assertEquals(42, issues, "开放 issue 数（含 PR）要落库");
+        Integer forks = jdbc.queryForObject("SELECT forks FROM weekly_project_weeks"
+                + " WHERE space_id = ? AND source = 'github' LIMIT 1", Integer.class, spaceId);
+        assertEquals(7, forks, "fork 数要落库");
     }
 
     @Test

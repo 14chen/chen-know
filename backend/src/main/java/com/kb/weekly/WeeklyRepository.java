@@ -64,6 +64,17 @@ public class WeeklyRepository {
         return count != null && count > 0;
     }
 
+    public java.util.Optional<Run> findById(long spaceId, long id) {
+        return jdbc.query("SELECT id, iso_week, started_at, finished_at, status, notes_created,"
+                        + " notes_skipped, github_count, gitee_count, error FROM weekly_runs"
+                        + " WHERE space_id = ? AND id = ?",
+                (rs, rowNum) -> new Run(rs.getLong("id"), rs.getString("iso_week"),
+                        rs.getString("started_at"), rs.getString("finished_at"), rs.getString("status"),
+                        rs.getInt("notes_created"), rs.getInt("notes_skipped"), rs.getInt("github_count"),
+                        rs.getInt("gitee_count"), rs.getString("error")),
+                spaceId, id).stream().findFirst();
+    }
+
     public List<Run> recent(long spaceId, int limit) {
         return jdbc.query("SELECT id, iso_week, started_at, finished_at, status, notes_created,"
                         + " notes_skipped, github_count, gitee_count, error FROM weekly_runs WHERE space_id = ?"

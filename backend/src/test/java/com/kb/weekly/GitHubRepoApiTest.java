@@ -40,7 +40,8 @@ class GitHubRepoApiTest {
             if (failure != null) {
                 throw failure;
             }
-            return "{\"full_name\":\"x/y\",\"pushed_at\":\"" + pushedAt + "\"}";
+            return "{\"full_name\":\"x/y\",\"pushed_at\":\"" + pushedAt + "\","
+                    + "\"open_issues_count\":42,\"forks_count\":7}";
         }
     }
 
@@ -61,6 +62,17 @@ class GitHubRepoApiTest {
         assertEquals("2026-10-24T08:00:00Z", result.get(1).updatedAt());
         assertTrue(transport.urls.contains("https://api.github.com/repos/a/b"), transport.urls.toString());
         assertTrue(transport.urls.contains("https://api.github.com/repos/c/d"), transport.urls.toString());
+    }
+
+    @Test
+    @DisplayName("同一个 /repos 响应顺带取开放 issue 与 fork 数，不额外发请求")
+    void capturesEngagementSignals() {
+        FakeTransport transport = new FakeTransport();
+        List<WeeklyRepo> result = api(transport, "https://api.github.com")
+                .withUpdatedAt(List.of(repo("a/b")));
+        assertEquals(1, transport.calls.get(), "互动信号必须搭车，不能为它多发请求");
+        assertEquals(42, result.get(0).openIssues(), "open_issues_count（含开放 PR）是活跃度信号");
+        assertEquals(7, result.get(0).forks(), "forks_count 是真实传播信号");
     }
 
     @Test

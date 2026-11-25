@@ -60,15 +60,15 @@ public class GitHubRepoApi {
         AtomicBoolean breaker = new AtomicBoolean(false);
         AtomicInteger requested = new AtomicInteger();
         AtomicInteger filled = new AtomicInteger();
-        java.util.Map<String, String> resolved = new java.util.concurrent.ConcurrentHashMap<>();
+        java.util.Map<String, RepoMeta> resolved = new java.util.concurrent.ConcurrentHashMap<>();
 
         // 先探一个：这样一旦撞上 403/429，最多浪费 1 次额度就整轮收手
         WeeklyRepo probe = targets.get(0);
         requested.incrementAndGet();
         try {
-            String pushedAt = fetchPushedAt(base, probe.repo());
-            if (pushedAt != null) {
-                resolved.put(probe.repo(), pushedAt);
+            RepoMeta meta = fetchMeta(base, probe.repo());
+            if (meta != null) {
+                resolved.put(probe.repo(), meta);
                 filled.incrementAndGet();
             }
         } catch (RateLimited e) {
@@ -90,9 +90,9 @@ public class GitHubRepoApi {
                     }
                     requested.incrementAndGet();
                     try {
-                        String pushedAt = fetchPushedAt(base, repo.repo());
-                        if (pushedAt != null) {
-                            resolved.put(repo.repo(), pushedAt);
+                        RepoMeta meta = fetchMeta(base, repo.repo());
+                        if (meta != null) {
+                            resolved.put(repo.repo(), meta);
                             filled.incrementAndGet();
                         }
                     } catch (RateLimited e) {
@@ -126,15 +126,20 @@ public class GitHubRepoApi {
                 requested.get(), filled.get(), breaker.get() ? "（已限流熔断）" : "");
         List<WeeklyRepo> result = new ArrayList<>(repos.size());
         for (WeeklyRepo repo : repos) {
-            String updatedAt = resolved.get(repo.repo());
-            if (updatedAt == null) {
+            RepoMeta meta = resolved.get(repo.repo());
+            if (meta == null) {
                 result.add(repo);
             } else {
                 result.add(new WeeklyRepo(repo.source(), repo.repo(), repo.url(), repo.stars(),
-                        repo.weeklyStars(), repo.language(), repo.description(), updatedAt));
+                        repo.weeklyStars(), repo.language(), repo.description(), meta.pushedAt(),
+                        meta.openIssues(), meta.forks()));
             }
         }
         return result;
+    }
+
+    /** 一次 /repos 响应里能顺带拿到的全部信号，避免为互动数再发请求。 */
+    private record RepoMeta(String pushedAt, Integer openIssues, Integer forks) {
     }
 
     /** 403/429 视为限流（本轮熔断）；其它失败只影响这一个仓库。 */
@@ -144,7 +149,7 @@ public class GitHubRepoApi {
         }
     }
 
-    private String fetchPushedAt(String base, String repo) {
+    private RepoMeta fetchMeta(String base, String repo) {
         String url = base + "/repos/" + repo;
         String body;
         try {
@@ -159,11 +164,14 @@ public class GitHubRepoApi {
         try {
             Map<String, Object> json = MiniJson.asObject(MiniJson.parse(body));
             String pushedAt = MiniJson.string(json.get("pushed_at"));
-            if (pushedAt == null || pushedAt.isBlank()) {
+            Integer openIssues = MiniJson.integer(json.get("open_issues_count"));
+            Integer forks = MiniJson.integer(json.get("forks_count"));
+            if ((pushedAt == null || pushedAt.isBlank()) && openIssues == null && forks == null) {
                 return null;
             }
-            log.debug("GitHub API 补 pushed_at: {} → {}", repo, pushedAt);
-            return pushedAt.trim();
+            log.debug("GitHub API 补元信息: {} pushed={} issues={} forks={}", repo, pushedAt, openIssues, forks);
+            return new RepoMeta(pushedAt == null || pushedAt.isBlank() ? null : pushedAt.trim(),
+                    openIssues, forks);
         } catch (IllegalArgumentException e) {
             log.debug("GitHub API 响应无法解析: {} ({})", repo, e.toString());
             return null;

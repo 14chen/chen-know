@@ -1,5 +1,7 @@
 package com.kb.weekly;
 
+import com.kb.ops.RunMetricsService;
+
 import com.kb.briefing.BriefingText;
 import com.kb.briefing.TranslationClient;
 import com.kb.common.ApiException;
@@ -58,6 +60,10 @@ public class WeeklyService {
     private final ReadmeFetcher readmeFetcher;
     private final UserRepository userRepository;
     private final SpaceRepository spaceRepository;
+    private final WeeklyExperienceService weeklyExperience;
+    private final com.kb.run.RunLauncher launcher;
+    private final com.kb.run.RunProgressRepository runProgress;
+    private final RunMetricsService metrics;
     private final Clock clock;
 
     /** spaceId → 正在跑：同一空间并发第二个请求直接 409。 */
@@ -68,7 +74,9 @@ public class WeeklyService {
             GiteeWeeklyReader giteeReader, RepoStarSnapshots snapshots, WeeklyRepository repository,
             NoteService noteService, FolderService folderService, FolderRepository folderRepository,
             TranslationClient translation, ReadmeFetcher readmeFetcher, UserRepository userRepository,
-            SpaceRepository spaceRepository, Clock clock) {
+            SpaceRepository spaceRepository, WeeklyExperienceService weeklyExperience,
+            com.kb.run.RunLauncher launcher, com.kb.run.RunProgressRepository runProgress,
+            RunMetricsService metrics, Clock clock) {
         this.properties = properties;
         this.gitHubClient = gitHubClient;
         this.gitHubApi = gitHubApi;
@@ -82,6 +90,10 @@ public class WeeklyService {
         this.readmeFetcher = readmeFetcher;
         this.userRepository = userRepository;
         this.spaceRepository = spaceRepository;
+        this.weeklyExperience = weeklyExperience;
+        this.launcher = launcher;
+        this.runProgress = runProgress;
+        this.metrics = metrics;
         this.clock = clock;
     }
 
@@ -101,10 +113,28 @@ public class WeeklyService {
             throw ApiException.conflict("本周报任务正在运行，请稍后重试");
         }
         try {
-            return execute(userId, spaceId);
+            return execute(userId, spaceId, null);
+        } catch (org.springframework.dao.DataAccessException e) {
+            throw ApiException.conflict("该空间已有周报任务在运行，请稍后重试");
         } finally {
             running.remove(spaceId);
         }
+    }
+
+    /** 异步模式：先插 run 行拿 DB 锁，后台执行；同步 run 行为不变。 */
+    public long runAsync(long userId, long spaceId, String trigger) {
+        if (!properties.isEnabled()) {
+            throw ApiException.forbidden("周报功能已关闭（kb.weekly.enabled=false），已拒绝执行");
+        }
+        Instant now = Instant.now(clock);
+        long runId;
+        try {
+            runId = repository.insert(spaceId, currentIsoWeek(now), Times.format(now));
+        } catch (org.springframework.dao.DataAccessException e) {
+            throw ApiException.conflict("该空间已有周报任务在运行，请稍后重试");
+        }
+        launcher.submit("weekly", spaceId, runId, () -> execute(userId, spaceId, runId));
+        return runId;
     }
 
     /** 定时任务与启动补抓共用：同一个 ISO 周已经成功跑过就跳过。 */
@@ -144,18 +174,21 @@ public class WeeklyService {
         }
     }
 
-    private RunResponse execute(long userId, long spaceId) {
+    private RunResponse execute(long userId, long spaceId, Long preallocatedRunId) {
         long startedMillis = System.currentTimeMillis();
         Instant now = Instant.now(clock);
         String isoWeek = currentIsoWeek(now);
+        weeklyExperience.beginRun();
         String startedAt = Times.format(now);
-        long runId = repository.insert(spaceId, isoWeek, startedAt);
+        long runId = preallocatedRunId == null ? repository.insert(spaceId, isoWeek, startedAt) : preallocatedRunId;
 
         List<WeeklyRepo> github = new ArrayList<>();
         List<WeeklyRepo> gitee = new ArrayList<>();
         String githubNote = null;
         String giteeNote = null;
         int created = 0;
+        long fetchDoneMs = 0;
+        long renderDoneMs = 0;
         try {
             try {
                 github = gitHubApi.withUpdatedAt(gitHubClient.fetchTrending().stream()
@@ -171,6 +204,12 @@ public class WeeklyService {
             giteeNote = giteeResult.note();
             gitee = withWeeklyDeltas(spaceId, giteeResult.items().stream()
                     .limit(properties.getPerSource()).toList(), now);
+            int fetched = github.size() + gitee.size();
+            fetchDoneMs = System.currentTimeMillis();
+            runProgress.stage(spaceId, "weekly", runId, "enriching", fetched, fetched);
+            if (runProgress.isCancelled(spaceId, "weekly", runId)) {
+                return cancelledRun(runId, isoWeek, spaceId, now, startedMillis);
+            }
 
             Long rootId = ensureFolder(spaceId, null, properties.getFolder());
             Long weekId = ensureFolder(spaceId, rootId, isoWeek);
@@ -200,9 +239,17 @@ public class WeeklyService {
                 }
             }
 
+            runProgress.stage(spaceId, "weekly", runId, "quality_ai", all.size(), all.size());
+            if (runProgress.isCancelled(spaceId, "weekly", runId)) {
+                return cancelledRun(runId, isoWeek, spaceId, now, startedMillis);
+            }
             Map<String, ReadmeFetcher.Result> readmes = pending.isEmpty() || !properties.isTutorialEnabled()
                     ? Map.of()
                     : readmeFetcher.fetchAll(pending.stream().map(all::get).toList());
+            runProgress.stage(spaceId, "weekly", runId, "rendering", all.size(), all.size());
+            if (runProgress.isCancelled(spaceId, "weekly", runId)) {
+                return cancelledRun(runId, isoWeek, spaceId, now, startedMillis);
+            }
 
             for (int index : pending) {
                 WeeklyRepo repo = all.get(index);
@@ -226,15 +273,22 @@ public class WeeklyService {
                     ordered.add(ref);
                 }
             }
+            renderDoneMs = System.currentTimeMillis();
             recordSnapshots(spaceId, github, gitee, notGithub(all, github), now);
+            // 只写体验用的新表，不改周报笔记与 run 结果
+            weeklyExperience.write(spaceId, isoWeek, all, ordered, Times.format(now));
 
             String status = decideStatus(github, gitee);
             String error = "failed".equals(status) ? combineNotes(githubNote, giteeNote) : null;
             repository.finish(runId, Times.format(Instant.now(clock)), status, created, skipped,
                     github.size(), gitee.size(), error);
-            log.info("周报完成: {} status={} GitHub={} Gitee={} 新笔记={} 已存在跳过={} 耗时={}ms", isoWeek,
-                    status, github.size(), gitee.size(), created, skipped,
-                    System.currentTimeMillis() - startedMillis);
+            runProgress.finish(spaceId, "weekly", runId, "done".equals(status) ? "done" : status);
+            recordMetrics(spaceId, runId, status, startedMillis, fetchDoneMs, renderDoneMs,
+                    github.size() + gitee.size(), created);
+            log.info("周报完成: week={} status={} GitHub={} Gitee={} 新笔记={} 已存在跳过={} 耗时={}ms"
+                            + " runId={} module=weekly items={}",
+                    isoWeek, status, github.size(), gitee.size(), created, skipped,
+                    System.currentTimeMillis() - startedMillis, runId, created);
             return new RunResponse(runId, isoWeek, status, created, skipped, ordered, githubNote, giteeNote);
         } catch (RuntimeException e) {
             String message = e.getMessage() == null || e.getMessage().isBlank()
@@ -245,9 +299,33 @@ public class WeeklyService {
             } catch (RuntimeException ignored) {
                 // 落库失败不再掩盖原始异常
             }
-            log.warn("周报失败: {} 原因={}", isoWeek, message, e);
+            runProgress.finish(spaceId, "weekly", runId, "failed");
+            recordMetrics(spaceId, runId, "failed", startedMillis, fetchDoneMs, renderDoneMs,
+                    github.size() + gitee.size(), created);
+            log.warn("周报失败: week={} 原因={} runId={} module=weekly", isoWeek, message, runId, e);
             return new RunResponse(runId, isoWeek, "failed", created, 0, List.of(), githubNote, giteeNote);
         }
+    }
+
+    private void recordMetrics(long spaceId, long runId, String status, long startedMillis, long fetchDoneMs,
+            long renderDoneMs, int fetched, int kept) {
+        try {
+            long now = System.currentTimeMillis();
+            long fetchMs = fetchDoneMs > 0 ? fetchDoneMs - startedMillis : 0;
+            long renderMs = renderDoneMs > fetchDoneMs && fetchDoneMs > 0 ? renderDoneMs - fetchDoneMs : 0;
+            metrics.save(new com.kb.ops.RunMetrics("weekly", runId, status, now - startedMillis, fetchMs, 0, 0,
+                    renderMs, fetched, kept, 0, 0, 0, 0, 0, Times.format(Instant.now(clock))), spaceId);
+        } catch (RuntimeException e) {
+            log.warn("周报指标写入失败（不影响生成）: run={} {}", runId, e.toString());
+        }
+    }
+
+    private RunResponse cancelledRun(long runId, String isoWeek, long spaceId, Instant now, long startedMillis) {
+        repository.finish(runId, Times.format(now), "cancelled", 0, 0, 0, 0, "用户取消");
+        runProgress.finish(spaceId, "weekly", runId, "cancelled");
+        recordMetrics(spaceId, runId, "cancelled", System.currentTimeMillis() - startedMillis, 0, 0, 0, 0);
+        log.info("周报已取消: run={} space={}", runId, spaceId);
+        return new RunResponse(runId, isoWeek, "cancelled", 0, 0, List.of(), null, null);
     }
 
     /** GitHub 有官方周增；Gitee 用「本次 - 7 天前最接近快照」。 */
@@ -374,6 +452,11 @@ public class WeeklyService {
         int week = date.get(WeekFields.ISO.weekOfWeekBasedYear());
         int year = date.get(WeekFields.ISO.weekBasedYear());
         return String.format("%d-W%02d", year, week);
+    }
+
+    public WeeklyRepository.Run recentRunById(long spaceId, long id) {
+        return repository.findById(spaceId, id)
+                .orElseThrow(() -> ApiException.notFound("运行记录不存在"));
     }
 
     public List<WeeklyRepository.Run> recent(long spaceId, int limit) {
