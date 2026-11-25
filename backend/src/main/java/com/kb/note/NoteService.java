@@ -103,19 +103,26 @@ public class NoteService {
         int sortOrder = patch.hasSortOrder() ? patch.sortOrder() : current.sortOrder();
         String now = Times.now();
 
-        if (titleChanged || contentChanged) {
-            // 1) 旧内容先落成历史版本（version = 旧版本号） 2) 再更新正文并把 version 自增
-            versions.insert(noteId, current.version(), current.title(), current.content(), now, userId);
+        // 自动保存（createVersion=false）只落正文，不写历史、不自增 version；
+        // 手动保存 / 标题修改 / 回滚仍按原语义留版本。forceVersion 供「存为版本」显式打点。
+        boolean versioned = (patch.createVersion() && (titleChanged || contentChanged)) || patch.forceVersion();
+        if (titleChanged || contentChanged || versioned) {
+            if (versioned) {
+                // 1) 旧内容先落成历史版本（version = 旧版本号） 2) 再更新正文并把 version 自增
+                versions.insert(noteId, current.version(), current.title(), current.content(), now, userId);
+            }
             notes.updateContent(spaceId, noteId, title, content, Excerpt.of(content),
-                    searchBlob(title, content), current.version() + 1, now);
+                    searchBlob(title, content), current.version() + (versioned ? 1 : 0), now);
             if (contentChanged) {
                 links.rebuild(spaceId, noteId, content);
             }
             if (titleChanged) {
                 links.backfillDangling(spaceId, noteId, title);
             }
-            // 只有正文/标题真的变了才算一次编辑；收藏/置顶/移动目录不写日志
-            activities.record(userId, noteId, ACTION_EDIT);
+            // 只有产生版本才算一次编辑；收藏/置顶/移动目录/自动保存不写日志
+            if (versioned) {
+                activities.record(userId, noteId, ACTION_EDIT);
+            }
         }
         notes.updateMeta(spaceId, noteId, folderId, favorite, pinned, sortOrder, now);
         return detail(spaceId, noteId);

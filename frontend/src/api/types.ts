@@ -57,6 +57,10 @@ export interface NotePatch {
   isFavorite?: boolean
   isPinned?: boolean
   sortOrder?: number
+  /** false = 自动保存：正文落盘但不新建历史版本、不递增 version（默认 true） */
+  createVersion?: boolean
+  /** true = 显式「存为版本」：即使内容没变也留一个快照 */
+  forceVersion?: boolean
 }
 
 export interface CreateNoteRequest {

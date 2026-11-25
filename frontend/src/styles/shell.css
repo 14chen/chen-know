@@ -881,6 +881,12 @@
   margin-left: auto;
 }
 
+/* 已收藏态：用颜色 + aria-pressed 双通道表达，不只靠图标填充 */
+.kb-topbar__actions .kb-btn--icon[aria-pressed='true'] {
+  color: var(--warning);
+  background: var(--warning-soft, var(--bg-subtle));
+}
+
 .kb-topbar__search {
   display: flex;
 }
@@ -988,6 +994,14 @@
   font: inherit;
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+/* 「存为版本」：自动保存不刷版本，这里给用户一个显式的打点入口 */
+.kb-topbar__version-btn {
+  height: 26px;
+  padding: 0 var(--sp-2);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
 }
 
 .kb-editor-region {

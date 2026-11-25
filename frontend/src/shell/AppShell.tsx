@@ -372,7 +372,6 @@ export function parseOutline(content: string): OutlineItem[] {
 }
 
 const OUTLINE_OPEN_KEY = 'kb.outline.open'
-const OUTLINE_MAX = 30
 
 function NoteOutline({
   content,
@@ -405,7 +404,9 @@ function NoteOutline({
     if (!title) return parsed
     return parsed.filter((item) => !(item.level === 1 && item.text.replace(/\s+/g, ' ').trim() === title))
   }, [content, noteTitle])
-  const shown = useMemo(() => items.slice(0, OUTLINE_MAX), [items])
+  // 长文（几百个小节）也要能完整跳转：列表本身可滚动（见 note-outline.css），
+  // 不再截断前 30 条，否则后面的标题永远点不到。
+  const shown = items
   // 实际断点：desktop ≥1280 / laptop 1024–1279 / tablet 768–1023 / phone ≤767
   //   → 桌面常驻面板；笔记本（1024–1279，含方案里的 900–1179 平板）默认收起 + 右侧抽屉；
   //     平板/手机（≤1023）改顶部「目录」按钮 + 底部抽屉
@@ -550,9 +551,6 @@ function NoteOutline({
           </button>
         </li>
       ))}
-      {items.length > OUTLINE_MAX ? (
-        <li className="kb-outline__more">共 {items.length} 个标题（只显示前 {OUTLINE_MAX} 个）</li>
-      ) : null}
     </ul>
   )
 
@@ -1280,6 +1278,23 @@ export function AppShell({ user, theme, onSelectTheme, onLoggedOut }: AppShellPr
     [notes, toast],
   )
 
+  /** 收藏 / 取消收藏：列表菜单与顶栏 ⭐ 共用；不写日志、不产生新版本 */
+  const handleToggleFavorite = useCallback(
+    async (id: number) => {
+      const current = notes.items.find((item) => item.id === id)
+      if (!current) return
+      const next = !current.isFavorite
+      try {
+        await patchNote(id, { isFavorite: next })
+        await notes.reload()
+        toast.success(next ? '已收藏' : '已取消收藏')
+      } catch (error) {
+        toast.error(`收藏失败：${describeApiError(error)}`)
+      }
+    },
+    [notes, toast],
+  )
+
   /** 笔记项菜单「重命名」：先打开该篇，再让顶栏标题进入编辑态 */
   const handleStartRename = useCallback(
     (id: number) => {
@@ -1473,7 +1488,7 @@ export function AppShell({ user, theme, onSelectTheme, onLoggedOut }: AppShellPr
                 knownTitles={knownTitles}
                 onWikiLinkClick={handleWikiLinkClick}
                 onUploadImage={uploadImage}
-                onSave={saveNow}
+                onSave={notes.saveVersion}
                 readOnly={readMode}
               />
             </Suspense>
@@ -1624,6 +1639,7 @@ export function AppShell({ user, theme, onSelectTheme, onLoggedOut }: AppShellPr
             void handleDeleteNote(id)
           }}
           onRenameNote={handleStartRename}
+          onToggleFavoriteNote={(id) => void handleToggleFavorite(id)}
           onCollapse={() => {
             if (drawerMode) setDrawerOpen(false)
             else setCollapsed(true)
@@ -1650,6 +1666,9 @@ export function AppShell({ user, theme, onSelectTheme, onLoggedOut }: AppShellPr
           onRetrySave={() => {
             void saveNow()
           }}
+          onSaveVersion={() => {
+            void notes.saveVersion()
+          }}
           theme={theme}
           onSelectTheme={onSelectTheme}
           drawerMode={drawerMode}
@@ -1662,6 +1681,8 @@ export function AppShell({ user, theme, onSelectTheme, onLoggedOut }: AppShellPr
           editorWide={editorWide}
           renameSignal={renameSignal}
           onRenameNote={selectedId !== null ? (next) => handleRenameNote(selectedId, next) : undefined}
+          isFavorite={notes.items.find((item) => item.id === selectedId)?.isFavorite ?? false}
+          onToggleFavorite={selectedId !== null ? () => void handleToggleFavorite(selectedId) : undefined}
           onToggleEditorWidth={() => setEditorWide((value) => !value)}
         />
 

@@ -47,7 +47,8 @@ import { IconMore } from './shellIcons'
 import { formatRelativeTime } from './time'
 
 const MENU_WIDTH = 132
-const MENU_HEIGHT = 88
+/** 三项菜单（收藏 / 重命名 / 删除）的高度，用于计算向上展开时的位置 */
+const MENU_HEIGHT = 122
 
 export interface NoteListProps {
   items: NoteListItem[]
@@ -66,6 +67,8 @@ export interface NoteListProps {
   onDelete: (id: number) => void
   /** 重命名一篇笔记（外壳负责打开该篇并让顶栏标题进入编辑态） */
   onRename: (id: number) => void
+  /** 收藏 / 取消收藏（外壳负责 PATCH isFavorite 并刷新列表） */
+  onToggleFavorite: (id: number) => void
 }
 
 interface MenuState {
@@ -87,6 +90,7 @@ export function NoteList({
   creating,
   onDelete,
   onRename,
+  onToggleFavorite,
 }: NoteListProps) {
   const [menu, setMenu] = useState<MenuState | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -286,6 +290,18 @@ export function NoteList({
           aria-label={`「${menuItem.title || '无标题'}」的操作`}
           style={{ top: `${menu.top}px`, left: `${menu.left}px` }}
         >
+          <button
+            type="button"
+            role="menuitem"
+            className="kb-note-menu__item"
+            onClick={() => {
+              setMenu(null)
+              onToggleFavorite(menuItem.id)
+            }}
+          >
+            <IconStar size={14} aria-hidden="true" />
+            {menuItem.isFavorite ? '取消收藏' : '收藏'}
+          </button>
           <button
             type="button"
             role="menuitem"

@@ -116,6 +116,39 @@ class NoteApiIntegrationTest extends ApiTestSupport {
     }
 
     @Test
+    @DisplayName("自动保存不刷版本（createVersion=false）；存为版本（forceVersion）显式打点")
+    void autosaveDoesNotBumpVersion() throws Exception {
+        MockHttpSession alice = alice();
+        long id = createNote(alice, null, "自动保存-笔记", "初稿");
+
+        // 连写三次：正文每次都落库，但 version 与历史数保持不变
+        for (String text : List.of("初稿一", "初稿一二", "初稿一二三")) {
+            MvcResult saved = patchJson(alice, "/api/notes/" + id,
+                    "{\"content\":\"" + text + "\",\"createVersion\":false}")
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.version").value(1))
+                    .andReturn();
+            assertEquals(text, json(saved, "$.content"));
+        }
+        assertEquals(0, historyCount(id), "自动保存不应产生历史版本");
+        assertEquals("初稿一二三", json(getJson(alice, "/api/notes/" + id).andReturn(), "$.content"));
+
+        // 显式存版本：即使内容没变也留快照并 +1
+        patchJson(alice, "/api/notes/" + id, "{\"forceVersion\":true}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(2));
+        assertEquals(1, historyCount(id));
+        assertEquals("初稿一二三",
+                json(getJson(alice, "/api/notes/" + id + "/versions/1").andReturn(), "$.content"));
+
+        // 之后的手动保存仍按原语义 +1
+        patchJson(alice, "/api/notes/" + id, "{\"content\":\"定稿\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.version").value(3));
+        assertEquals(2, historyCount(id));
+    }
+
+    @Test
     @DisplayName("回滚：内容变回目标版本，且回滚前的内容被存为新版本")
     void restoreKeepsCurrentContentAsNewVersion() throws Exception {
         MockHttpSession alice = alice();

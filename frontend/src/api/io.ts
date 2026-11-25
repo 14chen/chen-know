@@ -5,7 +5,7 @@
  * 不能加进 `@/api/types`（Lead 冻结、且 §11 未授权），所以在这里做类型增补；
  * 顺带把「相对路径 filename」「拖拽文件夹递归」这些可独立测试的逻辑收敛到一处。
  */
-import type { ImportPreviewResponse, ImportResult } from '@/api/types'
+import type { FolderNode, ImportPreviewResponse, ImportResult } from '@/api/types'
 
 /* ---------------------------------------------------------------- 类型增补 */
 
@@ -121,10 +121,32 @@ export function relativePathOf(file: File): string {
   return path && path.length > 0 ? path : file.name
 }
 
-export function buildImportFormData(files: File[]): FormData {
+/**
+ * 构造 multipart。`targetFolderId` 是「导入到哪一级目录」：
+ * 不传/空 = 现有行为（按文件自带目录或未分类）；传 id = 以该目录为根，子目录挂在其下。
+ */
+export function buildImportFormData(files: File[], targetFolderId?: number | null): FormData {
   const form = new FormData()
+  if (targetFolderId != null) form.append('targetFolderId', String(targetFolderId))
   for (const file of files) form.append('file', file, relativePathOf(file))
   return form
+}
+
+/** 目录下拉选项：value 是 id，label 带层级缩进，path 是完整路径（确认弹窗里回显）。 */
+export interface FolderOption {
+  value: string
+  label: string
+  path: string
+}
+
+export function flattenFolderOptions(tree: FolderNode[], depth = 0, parentPath = ''): FolderOption[] {
+  const options: FolderOption[] = []
+  for (const node of tree) {
+    const path = parentPath ? `${parentPath}/${node.name}` : node.name
+    options.push({ value: String(node.id), label: `${'\u3000'.repeat(depth)}${node.name}`, path })
+    options.push(...flattenFolderOptions(node.children, depth + 1, path))
+  }
+  return options
 }
 
 /* --------------------------------------------------- 拖拽（文件 + 文件夹） */

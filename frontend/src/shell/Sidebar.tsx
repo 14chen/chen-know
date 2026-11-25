@@ -68,6 +68,7 @@ export interface SidebarProps {
   creatingNote: boolean
   onDeleteNote: (id: number) => void
   onRenameNote: (id: number) => void
+  onToggleFavoriteNote: (id: number) => void
 
   onCollapse: () => void
   onLogout: () => void
@@ -102,6 +103,7 @@ export function Sidebar({
   creatingNote,
   onDeleteNote,
   onRenameNote,
+  onToggleFavoriteNote,
   onCollapse,
   onLogout,
 }: SidebarProps) {
@@ -186,6 +188,7 @@ export function Sidebar({
           creating={creatingNote}
           onDelete={onDeleteNote}
         onRename={onRenameNote}
+        onToggleFavorite={onToggleFavoriteNote}
         />
       </div>
     </div>

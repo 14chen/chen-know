@@ -406,6 +406,50 @@ class ImportExportApiTest {
                         .file(md("x.md", "x"))).andExpect(status().isUnauthorized());
     }
 
+    @Test
+    @DisplayName("导入可指定目标目录：裸笔记直接落入，自带目录变子目录，预览回显完整路径")
+    void importIntoChosenFolder() throws Exception {
+        long parent = seedFolder(null, "目标库");
+        MockMultipartFile plain = md("裸笔记.md", "裸内容");
+        // front matter 指定目录：导入时应变成目标目录的子目录
+        MockMultipartFile nested = md("嵌套笔记.md", "---\nfolder: docs\n---\n嵌套内容");
+
+        mockMvc.perform(multipart("/api/import/preview")
+                        .file(plain).file(nested)
+                        .param("targetFolderId", String.valueOf(parent))
+                        .session(adminSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(2))
+                .andExpect(jsonPath("$.items[0].folder").value("目标库"))
+                .andExpect(jsonPath("$.items[1].folder").value("目标库/docs"));
+
+        mockMvc.perform(multipart("/api/import/markdown")
+                        .file(plain).file(nested)
+                        .param("targetFolderId", String.valueOf(parent))
+                        .session(adminSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.imported").value(2));
+
+        Long plainId = jdbc.queryForObject(
+                "SELECT id FROM notes WHERE space_id = ? AND title = '裸笔记'", Long.class, adminSpaceId);
+        Long nestedId = jdbc.queryForObject(
+                "SELECT id FROM notes WHERE space_id = ? AND title = '嵌套笔记'", Long.class, adminSpaceId);
+        assertNotNull(plainId);
+        assertNotNull(nestedId);
+        assertEquals(parent, folderIdOf(plainId));
+        long nestedFolder = folderIdOf(nestedId);
+        assertEquals("docs", jdbc.queryForObject("SELECT name FROM folders WHERE id = ?", String.class, nestedFolder));
+        Object parentId = jdbc.queryForMap("SELECT parent_id FROM folders WHERE id = ?", nestedFolder).get("parent_id");
+        assertEquals(parent, ((Number) parentId).longValue());
+
+        // 目标目录不属于本空间 / 不存在 → 404，绝不擅自落到别处
+        mockMvc.perform(multipart("/api/import/markdown")
+                        .file(md("x.md", "x"))
+                        .param("targetFolderId", "99999999")
+                        .session(adminSession))
+                .andExpect(status().isNotFound());
+    }
+
     // ---------------------------------------------------------------- 工具
 
     private static MockMultipartFile md(String name, String content) {
@@ -474,6 +518,12 @@ class ImportExportApiTest {
     private long noteIdByTitle(String title) {
         return jdbc.queryForObject("SELECT id FROM notes WHERE space_id = ? AND title = ?", Long.class,
                 adminSpaceId, title);
+    }
+
+    private long folderIdOf(long noteId) {
+        Object value = jdbc.queryForMap("SELECT folder_id FROM notes WHERE id = ?", noteId).get("folder_id");
+        assertNotNull(value, "笔记应有目录");
+        return ((Number) value).longValue();
     }
 
     private long matchCount(String query) {

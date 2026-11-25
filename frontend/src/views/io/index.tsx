@@ -6,7 +6,7 @@
  *   ① 多选 .md + 图片　② 选择整个文件夹（用 webkitRelativePath 保相对路径）　③ 单个 .zip
  * 图片不单独产生笔记，只作为正文图片引用的素材；找不到的引用逐条报告，**不阻断导入**。
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getAttachmentHealth } from '@/api/attachments'
 import type { AttachmentHealth } from '@/api/attachments'
 import { describeApiError, request } from '@/api/client'
@@ -15,6 +15,7 @@ import {
   buildImportFormData,
   collectDroppedFiles,
   fileSizeWarning,
+  flattenFolderOptions,
   IMPORT_ACCEPT,
   kindOf,
   relativePathOf,
@@ -49,6 +50,8 @@ export default function IoView({ ctx }: ViewProps) {
   const [blocked, setBlocked] = useState<{ errors: string[]; hint: string } | null>(null)
   const [result, setResult] = useState<ImportSummary | null>(null)
   const [noteId, setNoteId] = useState('')
+  /** 目标目录：'' = 未分类（根目录）；否则是目录 id。文件自带的子目录会挂在它下面。 */
+  const [targetFolderId, setTargetFolderId] = useState('')
 
   const abortRef = useRef<AbortController | null>(null)
   const dragDepth = useRef(0)
@@ -139,7 +142,7 @@ export default function IoView({ ctx }: ViewProps) {
     try {
       const data = await request<ImportPreview>('/api/import/preview', {
         method: 'POST',
-        formData: buildImportFormData(files),
+        formData: buildImportFormData(files, targetFolderId ? Number(targetFolderId) : null),
         signal: controller.signal,
       })
       if (controller.signal.aborted) return
@@ -161,7 +164,7 @@ export default function IoView({ ctx }: ViewProps) {
     } finally {
       if (!controller.signal.aborted) setBusy(null)
     }
-  }, [busy, ctx, files])
+  }, [busy, ctx, files, targetFolderId])
 
   const runImport = useCallback(async () => {
     if (busy || files.length === 0) return
@@ -172,7 +175,7 @@ export default function IoView({ ctx }: ViewProps) {
     try {
       const data = await request<ImportSummary>('/api/import/markdown', {
         method: 'POST',
-        formData: buildImportFormData(files),
+        formData: buildImportFormData(files, targetFolderId ? Number(targetFolderId) : null),
         signal: controller.signal,
       })
       if (controller.signal.aborted) return
@@ -192,9 +195,18 @@ export default function IoView({ ctx }: ViewProps) {
     } finally {
       if (!controller.signal.aborted) setBusy(null)
     }
-  }, [busy, ctx, files])
+  }, [busy, ctx, files, targetFolderId])
 
   const batch = summarize(files)
+  const folderOptions = useMemo(
+    () => [
+      { value: '', label: '未分类（根目录）', path: '未分类' },
+      ...flattenFolderOptions(ctx.tree),
+    ],
+    [ctx.tree],
+  )
+  const targetFolderPath =
+    folderOptions.find((option) => option.value === targetFolderId)?.path ?? '未分类'
   const noteOptions = [
     { value: '', label: ctx.notes.length ? '选择一篇笔记…' : '还没有可导出的笔记' },
     ...ctx.notes.map((note) => ({ value: String(note.id), label: note.title || `（无标题 #${note.id}）` })),
@@ -270,6 +282,19 @@ export default function IoView({ ctx }: ViewProps) {
               </p>
             </div>
             <div className="kb-adm-card__body">
+              <div className="kb-adm-io-row__control">
+                <Select
+                  label="导入到目录"
+                  options={folderOptions}
+                  value={targetFolderId}
+                  onChange={(event) => setTargetFolderId(event.target.value)}
+                  aria-label="选择导入到的目录"
+                  disabled={busy !== null}
+                />
+              </div>
+              <p className="kb-adm-faint">
+                文件自带的目录结构会成为该目录的子目录；选「未分类」则保持原有行为。
+              </p>
               <div
                 className={`kb-adm-drop${dragging ? ' is-over' : ''}${busy ? ' is-disabled' : ''}`}
                 role="button"
@@ -445,7 +470,8 @@ export default function IoView({ ctx }: ViewProps) {
             <p className="kb-adm-summary">
               共 {preview.total} 篇待导入（来自 {files.length || preview.total} 个文件
               {batch.image > 0 ? `，其中 ${batch.image} 张图片` : ''}）
-              {preview.errors?.length ? `，其中 ${preview.errors.length} 个文件解析失败` : ''}。确认后将写入当前空间。
+              {preview.errors?.length ? `，其中 ${preview.errors.length} 个文件解析失败` : ''}。确认后将写入当前空间的「
+              {targetFolderPath}」。
             </p>
             {preview.errors?.length ? (
               <ul className="kb-adm-error-list">

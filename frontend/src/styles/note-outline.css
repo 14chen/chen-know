@@ -126,12 +126,6 @@
   color: var(--text-muted);
 }
 
-.kb-outline__more {
-  padding: 4px 6px;
-  color: var(--text-muted);
-  font-size: 11px;
-}
-
 .kb-outline__collapsed,
 .kb-outline__toggle {
   position: fixed;

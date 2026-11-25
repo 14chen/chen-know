@@ -21,13 +21,15 @@ public class ImportController {
 
     @PostMapping("/preview")
     public ImportPreviewResponse preview(@AuthenticationPrincipal KbPrincipal principal,
-            @RequestParam(value = "file", required = false) MultipartFile[] files) {
-        return importService.preview(principal, files);
+            @RequestParam(value = "file", required = false) MultipartFile[] files,
+            @RequestParam(value = "targetFolderId", required = false) Long targetFolderId) {
+        return importService.preview(principal, files, targetFolderId);
     }
 
     @PostMapping("/markdown")
     public ImportResult importMarkdown(@AuthenticationPrincipal KbPrincipal principal,
-            @RequestParam(value = "file", required = false) MultipartFile[] files) {
-        return importService.importMarkdown(principal, files);
+            @RequestParam(value = "file", required = false) MultipartFile[] files,
+            @RequestParam(value = "targetFolderId", required = false) Long targetFolderId) {
+        return importService.importMarkdown(principal, files, targetFolderId);
     }
 }

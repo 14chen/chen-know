@@ -22,12 +22,14 @@ export const MAX_NOTES = 2000
 /** 新建/清空标题时的兜底标题（后端允许空标题，前端统一给它一个可读名字） */
 export const FALLBACK_TITLE = '未命名笔记'
 
-type FlushReason = 'auto' | 'manual' | 'switch'
+type FlushReason = 'auto' | 'manual' | 'switch' | 'sync' | 'version'
 
 function reasonLabel(reason: FlushReason): string {
   if (reason === 'auto') return '自动保存'
   if (reason === 'manual') return '保存'
-  return '切换笔记前的保存'
+  if (reason === 'switch') return '切换笔记前的保存'
+  if (reason === 'sync') return '刷新前的保存'
+  return '保存版本前的保存'
 }
 
 /** 详情页头部要用的元信息（原本 AppShell 又单独 getNote 了一次，现在由 hook 一并给出） */
@@ -81,6 +83,8 @@ export interface NotesController {
   changeContent: (next: string) => void
   /** 立即落盘（Ctrl/Cmd+S）。失败已提示，不会抛出 */
   saveNow: () => Promise<void>
+  /** 显式保存一个历史版本：即使正文没改也会留下快照并递增版本号 */
+  saveVersion: () => Promise<void>
   uploadImage: (file: File) => Promise<string>
 }
 
@@ -187,8 +191,11 @@ export function useNotes(): NotesController {
 
   /* ---- 保存 ------------------------------------------------------------ */
 
-  /** 落盘一次「当前内容」。执行时才读引用，因此排队期间产生的新输入也会被正确处理。 */
-  const runSave = useCallback(async (): Promise<void> => {
+  /**
+   * 落盘一次「当前内容」。执行时才读引用，因此排队期间产生的新输入也会被正确处理。
+   * createVersion=false（自动保存）时正文照常落盘，但服务端不写历史、不递增版本号。
+   */
+  const runSave = useCallback(async (createVersion: boolean): Promise<void> => {
     const id = noteIdRef.current
     if (id === null || !dirtyRef.current) return
 
@@ -200,7 +207,7 @@ export function useNotes(): NotesController {
     }
 
     setSaveState('saving')
-    const updated = await patchNote(id, { content: snapshot })
+    const updated = await patchNote(id, { content: snapshot, createVersion })
     if (noteIdRef.current !== id) return
 
     savedContentRef.current = snapshot
@@ -229,14 +236,20 @@ export function useNotes(): NotesController {
   }, [])
 
   /** 同一时刻只允许一个 PATCH 在飞 */
-  const enqueueSave = useCallback((): Promise<void> => {
-    const next = queueRef.current.then(runSave, runSave)
-    queueRef.current = next.then(
-      () => undefined,
-      () => undefined,
-    )
-    return next
-  }, [runSave])
+  const enqueueSave = useCallback(
+    (createVersion: boolean): Promise<void> => {
+      const next = queueRef.current.then(
+        () => runSave(createVersion),
+        () => runSave(createVersion),
+      )
+      queueRef.current = next.then(
+        () => undefined,
+        () => undefined,
+      )
+      return next
+    },
+    [runSave],
+  )
 
   /** 把未保存内容全部落盘；失败时提示并抛出（调用方决定是否中止切换） */
   const flush = useCallback(
@@ -246,8 +259,10 @@ export function useNotes(): NotesController {
       if (!dirtyRef.current) return
 
       try {
+        // 只有用户主动的「保存」才递增版本；自动保存 / 切换前落盘 / 刷新前落盘都不刷版本。
+        const createVersion = reason === 'manual'
         for (let round = 0; round < MAX_FLUSH_ROUNDS && dirtyRef.current; round += 1) {
-          await enqueueSave()
+          await enqueueSave(createVersion)
         }
       } catch (error) {
         const message = describeApiError(error)
@@ -295,6 +310,46 @@ export function useNotes(): NotesController {
       /* flush 内部已弹出错误提示 */
     }
   }, [flush])
+
+  /**
+   * 显式存一个版本。先把还没落盘的自动保存内容按「不建版本」的方式写下去，
+   * 再单独发一次 forceVersion=true 的 PATCH 打快照 —— 因此无论刚才是否在输入，
+   * 点一次就只会多一个版本，不会把途中的自动保存也算进去。
+   */
+  const saveVersion = useCallback(async (): Promise<void> => {
+    clearTimer()
+    try {
+      await flush('version')
+    } catch {
+      /* flush 内部已弹出错误提示 */
+      return
+    }
+    const id = noteIdRef.current
+    if (id === null) return
+    try {
+      const updated = await patchNote(id, { forceVersion: true })
+      if (noteIdRef.current !== id) return
+      setSelectedMeta((prev) =>
+        prev ? { ...prev, version: updated.version, updatedAt: updated.updatedAt } : prev,
+      )
+      setItems((prev) =>
+        prev.map((item) =>
+          item.id === id
+            ? { ...item, version: updated.version, updatedAt: updated.updatedAt }
+            : item,
+        ),
+      )
+      setSaveState('saved')
+      setSavedAt(Date.now())
+      setLastError(null)
+      toast.success(`已保存第 ${updated.version} 版`)
+    } catch (error) {
+      const message = describeApiError(error)
+      setLastError(message)
+      setSaveState('error')
+      toast.error(`保存版本失败：${message}`)
+    }
+  }, [clearTimer, flush, toast])
 
   /* ---- 切换笔记（切换前必须落盘）-------------------------------------- */
   const select = useCallback(
@@ -391,7 +446,7 @@ export function useNotes(): NotesController {
     if (id === null) return
 
     try {
-      await flush('manual')
+      await flush('sync')
     } catch {
       /* 落盘失败已提示：保留编辑器里未保存的内容，不做覆盖 */
       return
@@ -498,6 +553,7 @@ export function useNotes(): NotesController {
     select,
     changeContent,
     saveNow,
+    saveVersion,
     uploadImage,
   }
 }

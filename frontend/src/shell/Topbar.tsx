@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/Button'
-import { IconMenu, IconPanelLeft, IconSearch } from '@/components/Icon'
+import { IconMenu, IconPanelLeft, IconSearch, IconStar } from '@/components/Icon'
 import { SaveStatus } from './SaveStatus'
 import { IconContract, IconExpand } from './shellIcons'
 import { ThemeMenu } from './ThemeMenu'
@@ -15,6 +15,8 @@ export interface TopbarProps {
   saveState: SaveState
   savedAt: number | null
   onRetrySave: () => void
+  /** 显式存一个历史版本（自动保存不会产生版本） */
+  onSaveVersion?: () => void
   theme: Theme
   /** 主题菜单：四套主题里直接选一套 */
   onSelectTheme: (theme: Theme) => void
@@ -31,6 +33,9 @@ export interface TopbarProps {
   onRenameNote?: (next: string) => Promise<unknown> | unknown
   /** 外部请求进入重命名态（笔记项菜单「重命名」）：每 +1 触发一次 */
   renameSignal?: number
+  /** 当前笔记是否已收藏（笔记视图下显示 ⭐ 开关） */
+  isFavorite?: boolean
+  onToggleFavorite?: () => void
 }
 
 interface NoteTitleProps {
@@ -138,6 +143,7 @@ export function Topbar({
   saveState,
   savedAt,
   onRetrySave,
+  onSaveVersion,
   theme,
   onSelectTheme,
   drawerMode,
@@ -148,6 +154,8 @@ export function Topbar({
   onToggleEditorWidth,
   onRenameNote,
   renameSignal,
+  isFavorite = false,
+  onToggleFavorite,
 }: TopbarProps) {
   const [query, setQuery] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
@@ -227,8 +235,35 @@ export function Topbar({
           </Button>
         ) : null}
 
+        {showSaveStatus && onToggleFavorite ? (
+          <Button
+            variant="icon"
+            onClick={onToggleFavorite}
+            aria-label={isFavorite ? '取消收藏这篇笔记' : '收藏这篇笔记'}
+            aria-pressed={isFavorite}
+            title={isFavorite ? '取消收藏' : '收藏（收藏不会产生新版本）'}
+            data-testid="topbar-favorite"
+          >
+            <IconStar size={18} />
+          </Button>
+        ) : null}
+
         {showSaveStatus ? (
-          <SaveStatus state={saveState} savedAt={savedAt} onRetry={onRetrySave} />
+          <>
+            <SaveStatus state={saveState} savedAt={savedAt} onRetry={onRetrySave} />
+            {onSaveVersion ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="kb-topbar__version-btn"
+                onClick={onSaveVersion}
+                aria-label="保存版本"
+                title="自动保存不会增加版本号；点这里手动留一个历史版本（Ctrl+S 也可）"
+              >
+                存为版本
+              </Button>
+            ) : null}
+          </>
         ) : null}
 
         {/* 编辑器宽度：窄屏（≤1023px）本来就没有留白，按钮不渲染 */}

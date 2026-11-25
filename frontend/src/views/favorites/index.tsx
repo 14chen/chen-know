@@ -127,7 +127,7 @@ export default function FavoritesView({ ctx }: ViewProps) {
             <EmptyState
               icon={<span aria-hidden="true">⭐</span>}
               title="还没有收藏的笔记"
-              desc="在笔记工具栏点 ⭐ 即可收藏；收藏不会产生新版本。"
+              desc="在左侧笔记列表的「⋯」菜单点「收藏」，或打开笔记后点顶栏的 ⭐。收藏不会产生新版本。"
             />
           </div>
         ) : null}

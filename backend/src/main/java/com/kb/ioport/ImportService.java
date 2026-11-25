@@ -7,6 +7,8 @@ import com.kb.common.ApiException;
 import com.kb.common.ErrorCode;
 import com.kb.common.SearchText;
 import com.kb.common.Times;
+import com.kb.folder.FolderRepository;
+import com.kb.folder.FolderRow;
 import com.kb.link.LinkService;
 import com.kb.note.Excerpt;
 import com.kb.note.NotePatch;
@@ -83,24 +85,38 @@ public class ImportService {
     private final LinkService linkService;
     private final AttachmentService attachmentService;
     private final NoteService noteService;
+    private final FolderRepository folders;
     private final TransactionTemplate transactionTemplate;
 
     public ImportService(ImportRepository repository, ActivityService activities, LinkService linkService,
-            AttachmentService attachmentService, NoteService noteService,
+            AttachmentService attachmentService, NoteService noteService, FolderRepository folders,
             PlatformTransactionManager transactionManager) {
         this.repository = repository;
         this.activities = activities;
         this.linkService = linkService;
         this.attachmentService = attachmentService;
         this.noteService = noteService;
+        this.folders = folders;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
+    /** 兼容旧调用方：不指定目标目录时导入到未分类（保持历史行为）。 */
     public ImportPreviewResponse preview(KbPrincipal principal, MultipartFile[] files) {
+        return preview(principal, files, null);
+    }
+
+    /**
+     * 预览。{@code targetFolderId} 是「导入到哪一级目录」：null = 未分类（根目录），
+     * 否则其下按文件自带目录结构建子目录。预览里显示的目录会带上目标目录的完整路径。
+     */
+    public ImportPreviewResponse preview(KbPrincipal principal, MultipartFile[] files, Long targetFolderId) {
+        Long baseFolderId = requireTargetFolder(principal.spaceId(), targetFolderId);
+        String basePath = baseFolderId == null ? null : folderPath(principal.spaceId(), baseFolderId);
         Batch batch = parse(files);
         List<ImportPreviewItem> items = batch.prepared.stream()
                 .map(prepared -> new ImportPreviewItem(prepared.note().title(), prepared.note().sourceFile(),
-                        prepared.note().tags(), prepared.note().folderPath(), prepared.note().sizeBytes()))
+                        prepared.note().tags(), joinPath(basePath, prepared.note().folderPath()),
+                        prepared.note().sizeBytes()))
                 .toList();
         // preview 不上传；imagesImported 是「将会被导入的图片数量」（契约 §6.2 的预告语义）
         long planned = batch.prepared.stream().mapToLong(prepared -> prepared.images().size()).sum();
@@ -108,9 +124,15 @@ public class ImportService {
                 List.copyOf(batch.missingImages));
     }
 
+    /** 兼容旧调用方：不指定目标目录时导入到未分类（保持历史行为）。 */
     public ImportResult importMarkdown(KbPrincipal principal, MultipartFile[] files) {
+        return importMarkdown(principal, files, null);
+    }
+
+    public ImportResult importMarkdown(KbPrincipal principal, MultipartFile[] files, Long targetFolderId) {
         // parse() 已完成全部前置校验（条目数 / 解压总大小 / 编码 / 路径）：校验不过直接抛异常，
         // 到这里说明整批都允许写库，绝不会出现「报错说已拒绝、实际却写了一半」。
+        Long baseFolderId = requireTargetFolder(principal.spaceId(), targetFolderId);
         Batch batch = parse(files);
         List<String> errors = new ArrayList<>(batch.errors);
         List<MissingImage> missingImages = new ArrayList<>(batch.missingImages);
@@ -127,7 +149,7 @@ public class ImportService {
                     Map<String, Long> folderCache = new HashMap<>();
                     for (PreparedNote prepared : chunk) {
                         PendingNote pending = prepared.note();
-                        long noteId = insertNote(principal, pending, folderCache);
+                        long noteId = insertNote(principal, pending, folderCache, baseFolderId);
                         chunkNotes.add(new ImportedNote(noteId, pending.title(), pending.sourceFile()));
                         chunkImages[0] += attachImages(principal, noteId, pending, prepared.images(), missingImages);
                     }
@@ -159,10 +181,11 @@ public class ImportService {
 
     // ------------------------------------------------------------------ 写入
 
-    private long insertNote(KbPrincipal principal, PendingNote pending, Map<String, Long> folderCache) {
+    private long insertNote(KbPrincipal principal, PendingNote pending, Map<String, Long> folderCache,
+            Long baseFolderId) {
         long spaceId = principal.spaceId();
         String now = Times.now();
-        Long folderId = resolveFolder(spaceId, pending.folderPath(), folderCache, now);
+        Long folderId = resolveFolder(spaceId, pending.folderPath(), baseFolderId, folderCache, now);
         String blob = SearchText.normalize(pending.title() + "\n" + pending.content());
         long noteId = repository.insertNote(spaceId, folderId, pending.title(), pending.content(),
                 Excerpt.of(pending.content()), blob, now);
@@ -214,7 +237,7 @@ public class ImportService {
         }
         noteService.patch(principal.id(), principal.spaceId(), noteId,
                 new NotePatch(false, null, false, null, true, applyReplacements(pending.content(), replacements),
-                        false, null, false, null, false, null));
+                        false, null, false, null, false, null, true, false));
         return replacements.size();
     }
 
@@ -229,16 +252,21 @@ public class ImportService {
         return out.toString();
     }
 
-    /** 按 {@code 技术/Java} 逐级查找或创建目录。 */
-    private Long resolveFolder(long spaceId, String folderPath, Map<String, Long> cache, String now) {
+    /**
+     * 按 {@code 技术/Java} 逐级查找或创建目录，挂到 {@code baseFolderId} 之下。
+     * {@code baseFolderId=null} 表示从根建起（历史行为）；选定目标目录后，文件自带的目录结构
+     * 会成为它的子目录。缓存的 key 仍是文件内的相对路径（同一批次目标目录固定）。
+     */
+    private Long resolveFolder(long spaceId, String folderPath, Long baseFolderId, Map<String, Long> cache,
+            String now) {
         if (folderPath == null || folderPath.isBlank()) {
-            return null;
+            return baseFolderId;
         }
         Long cached = cache.get(folderPath);
         if (cached != null) {
             return cached;
         }
-        Long parentId = null;
+        Long parentId = baseFolderId;
         StringBuilder walked = new StringBuilder();
         for (String segment : folderPath.split("/")) {
             if (segment.isBlank()) {
@@ -253,6 +281,39 @@ public class ImportService {
             cache.putIfAbsent(walked.toString(), folderId);
         }
         return parentId;
+    }
+
+    /** 目标目录必须属于当前空间且未删除；null / 非法 id 一律按「未分类」之外的错误处理。 */
+    private Long requireTargetFolder(long spaceId, Long targetFolderId) {
+        if (targetFolderId == null) {
+            return null;
+        }
+        if (folders.findAlive(spaceId, targetFolderId).isEmpty()) {
+            throw ApiException.notFound("导入目标目录不存在");
+        }
+        return targetFolderId;
+    }
+
+    /** 从目录 id 往上走到根，拼成 {@code 技术/Java} 这样的完整路径（预览展示用）。 */
+    private String folderPath(long spaceId, long folderId) {
+        List<String> segments = new ArrayList<>();
+        Long cursor = folderId;
+        Set<Long> seen = new HashSet<>();
+        while (cursor != null && seen.add(cursor)) {
+            FolderRow row = folders.findAlive(spaceId, cursor).orElse(null);
+            if (row == null) break;
+            segments.add(row.name());
+            cursor = row.parentId();
+        }
+        java.util.Collections.reverse(segments);
+        return String.join("/", segments);
+    }
+
+    /** 目标目录路径 + 文件自带目录，得到预览里「最终会落在哪个目录」。 */
+    private static String joinPath(String basePath, String relativePath) {
+        if (basePath == null || basePath.isBlank()) return relativePath;
+        if (relativePath == null || relativePath.isBlank()) return basePath;
+        return basePath + "/" + relativePath;
     }
 
     // ------------------------------------------------------------------ 解析
